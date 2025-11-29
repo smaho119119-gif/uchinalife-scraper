@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scraper Data Review</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <h2>Data Files</h2>
+            <select id="fileSelect">
+                <option value="">Select a file...</option>
+            </select>
+            <div class="stats">
+                <p>Total Items: <span id="totalItems">0</span></p>
+                <p>Checked: <span id="checkedCount">0</span></p>
+            </div>
+            <button id="refreshBtn">Refresh Files</button>
+        </aside>
+        
+        <main class="main-content">
+            <header>
+                <h1>Data Review Dashboard</h1>
+                <div class="filters">
+                    <input type="text" id="searchInput" placeholder="Search by title, price...">
+                </div>
+            </header>
+            
+            <div class="table-container">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Status</th>
+                            <th>Title</th>
+                            <th>Price</th>
+                            <th>Favorites</th>
+                            <th>Update Date</th>
+                            <th>Expiry</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">Title</h2>
+            <div class="modal-grid">
+                <div class="modal-info">
+                    <p><strong>URL:</strong> <a href="#" id="modalUrl" target="_blank">Link</a></p>
+                    <p><strong>Price:</strong> <span id="modalPrice"></span></p>
+                    <p><strong>Favorites:</strong> <span id="modalFav"></span></p>
+                    <p><strong>Dates:</strong> <span id="modalDates"></span></p>
+                    <div id="modalExtraData"></div>
+                    
+                    <div class="feedback-section">
+                        <h3>Feedback</h3>
+                        <label>
+                            <input type="checkbox" id="modalUseful"> Useful / Verified
+                        </label>
+                        <textarea id="modalNotes" placeholder="Add notes here..."></textarea>
+                        <button id="saveFeedbackBtn">Save Feedback</button>
+                    </div>
+                </div>
+                <div class="modal-images">
+                    <h3>Images</h3>
+                    <div id="imageGrid" class="image-grid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

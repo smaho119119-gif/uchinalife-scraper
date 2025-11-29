@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>沖縄不動産総合データベース Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%);
+            color: white;
+            padding: 24px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 24px auto;
+            padding: 0 20px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #d32f2f;
+            margin-bottom: 4px;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .stat-change.positive {
+            color: #4caf50;
+        }
+
+        .stat-change.negative {
+            color: #f44336;
+        }
+
+        /* Charts Section */
+        .charts-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        /* Category List */
+        .category-list {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s;
+        }
+
+        .category-item:hover {
+            background: #f9f9f9;
+        }
+
+        .category-item:last-child {
+            border-bottom: none;
+        }
+
+        .category-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .category-stats {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .category-count {
+            font-size: 18px;
+            font-weight: 700;
+            color: #d32f2f;
+        }
+
+        .category-new {
+            font-size: 13px;
+            color: #4caf50;
+            background: #e8f5e9;
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+
+        /* Tabs */
+        .tabs {
+            background: white;
+            border-radius: 12px;
+            padding: 8px;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .tab {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: #f5f5f5;
+        }
+
+        .tab.active {
+            background: #d32f2f;
+            color: white;
+        }
+
+        /* Property Grid */
+        .properties-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .property-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .property-card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .property-image {
+            width: 100%;
+            height: 200px;
+            background: #f0f0f0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .property-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .property-image .no-image {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: #ccc;
+        }
+
+        .badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .badge.new {
+            background: #4caf50;
+        }
+
+        .badge.sold {
+            background: #666;
+        }
+
+        .property-info {
+            padding: 16px;
+        }
+
+        .property-price {
+            font-size: 22px;
+            font-weight: 700;
+            color: #d32f2f;
+            margin-bottom: 8px;
+        }
+
+        .property-title {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #333;
+            margin-bottom: 12px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            min-height: 42px;
+        }
+
+        .property-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .meta-tag {
+            padding: 4px 8px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #d32f2f;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-dialog {
+            max-width: 1000px;
+            width: 100%;
+            max-height: 90vh;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+        }
+
+        .modal-body {
+            padding: 0;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-content-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .modal-image {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+
+        .modal-image img {
+            width: 100%;
+            display: block;
+        }
+
+        .modal-details {
+            overflow-y: auto;
+            max-height: calc(90vh - 120px);
+        }
+
+        .detail-section {
+            margin-bottom: 20px;
+        }
+
+        .detail-section h3 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #d32f2f;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #d32f2f;
+        }
+
+        .detail-row {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .detail-label {
+            width: 120px;
+            font-size: 12px;
+            color: #666;
+            flex-shrink: 0;
+        }
+
+        .detail-value {
+            flex: 1;
+            font-size: 13px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .external-link {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            background: #d32f2f;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 13px;
+            margin-top: 16px;
+            transition: background 0.2s;
+        }
+
+        .external-link:hover {
+            background: #b71c1c;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+
+            .properties-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .modal {
+                padding: 0;
+            }
+
+            .modal-dialog {
+                max-height: 100vh;
+                border-radius: 0;
+            }
+
+            .modal-content-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .detail-row {
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .detail-label {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="header-content">
+            <h1>🏠 沖縄不動産総合データベース</h1>
+            <p class="subtitle">Okinawa Comprehensive Property Database</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Stats Overview -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>データ読み込み中...</p>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-section">
+            <div class="chart-card">
+                <h3 class="chart-title">価格分布</h3>
+                <div class="chart-container">
+                    <canvas id="priceChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3 class="chart-title">カテゴリー別物件数</h3>
+                <div class="chart-container">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3 class="chart-title">エリア別分布</h3>
+                <div class="chart-container">
+                    <canvas id="areaChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Details -->
+        <div class="category-list" id="categoryList">
+            <h3 class="chart-title">カテゴリー詳細</h3>
+            <div class="loading">読み込み中...</div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-view="all">全物件</button>
+            <button class="tab" data-view="new">新規物件</button>
+            <button class="tab" data-view="sold">成約済み</button>
+        </div>
+
+        <!-- Properties Grid -->
+        <div id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>物件データ読み込み中...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal" id="propertyModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle"></div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5001';
+        let currentView = 'all';
+        let allProperties = [];
+        let charts = {};
+
+        async function init() {
+            await loadAdvancedStats();
+            await loadProperties();
+            setupEventListeners();
+        }
+
+        async function loadAdvancedStats() {
+            try {
+                const res = await fetch(`${API_BASE}/api/stats/advanced`);
+                const data = await res.json();
+
+                if (data.success) {
+                    displayStats(data);
+                    displayCategoryDetails(data.by_category);
+                    createCharts(data);
+                }
+            } catch (e) {
+                console.error('Stats error:', e);
+            }
+        }
+
+        function displayStats(data) {
+            const statsGrid = document.getElementById('statsGrid');
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">総物件数</div>
+                    <div class="stat-value">${data.total_active.toLocaleString()}</div>
+                    <div class="stat-change">アクティブ物件</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">新規（今日）</div>
+                    <div class="stat-value">${data.new_today}</div>
+                    <div class="stat-change">今週: ${data.new_week} | 今月: ${data.new_month}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">平均価格</div>
+                    <div class="stat-value">${data.price_stats.average}</div>
+                    <div class="stat-change">中央値: ${data.price_stats.median}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">価格レンジ</div>
+                    <div class="stat-value">${data.price_stats.min}</div>
+                    <div class="stat-change">最高: ${data.price_stats.max}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">賃貸物件</div>
+                    <div class="stat-value">${data.by_type['賃貸'] || 0}</div>
+                    <div class="stat-change">アクティブ</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">売買物件</div>
+                    <div class="stat-value">${data.by_type['売買'] || 0}</div>
+                    <div class="stat-change">アクティブ</div>
+                </div>
+            `;
+        }
+
+        function displayCategoryDetails(categories) {
+            const list = document.getElementById('categoryList');
+            let html = '<h3 class="chart-title">カテゴリー詳細</h3>';
+
+            for (const [key, cat] of Object.entries(categories)) {
+                html += `
+                    <div class="category-item">
+                        <div class="category-name">${cat.category_type} - ${cat.genre_name_ja}</div>
+                        <div class="category-stats">
+                            <div class="category-count">${cat.count}件</div>
+                            ${cat.new_today > 0 ? `<div class="category-new">+${cat.new_today} NEW</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+            list.innerHTML = html;
+        }
+
+        function createCharts(data) {
+            // Price Distribution Chart (今回はシンプル化)
+            const priceCtx = document.getElementById('priceChart');
+            if (charts.priceChart) charts.priceChart.destroy();
+
+            charts.priceChart = new Chart(priceCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['最低', '平均', '中央値', '最高'],
+                    datasets: [{
+                        label: '価格 (万円)',
+                        data: [
+                            data.price_stats.min_raw,
+                            data.price_stats.average_raw,
+                            data.price_stats.median_raw,
+                            data.price_stats.max_raw
+                        ],
+                        backgroundColor: [
+                            'rgba(76, 175, 80, 0.7)',
+                            'rgba(211, 47, 47, 0.7)',
+                            'rgba(255, 152, 0, 0.7)',
+                            'rgba(156, 39, 176, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(76, 175, 80, 1)',
+                            'rgba(211, 47, 47, 1)',
+                            'rgba(255, 152, 0, 1)',
+                            'rgba(156, 39, 176, 1)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // Category Chart
+            const catLabels = [];
+            const catData = [];
+            for (const cat of Object.values(data.by_category)) {
+                catLabels.push(cat.genre_name_ja);
+                catData.push(cat.count);
+            }
+
+            const catCtx = document.getElementById('categoryChart');
+            if (charts.categoryChart) charts.categoryChart.destroy();
+
+            charts.categoryChart = new Chart(catCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: catLabels,
+                    datasets: [{
+                        data: catData,
+                        backgroundColor: [
+                            '#d32f2f', '#1976d2', '#388e3c', '#f57c00',
+                            '#7b1fa2', '#c2185b', '#0097a7', '#689f38'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // Area Chart
+            const areaLabels = Object.keys(data.by_area);
+            const areaData = Object.values(data.by_area);
+
+            const areaCtx = document.getElementById('areaChart');
+            if (charts.areaChart) charts.areaChart.destroy();
+
+            charts.areaChart = new Chart(areaCtx, {
+                type: 'bar',
+                data: {
+                    labels: areaLabels,
+                    datasets: [{
+                        label: '物件数',
+                        data: areaData,
+                        backgroundColor: 'rgba(211, 47, 47, 0.7)',
+                        borderColor: 'rgba(211, 47, 47, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        async function loadProperties() {
+            const content = document.getElementById('content');
+            content.innerHTML = '<div class="loading"><div class="spinner"></div><p>読み込み中...</p></div>';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/properties/${currentView}`);
+                const data = await res.json();
+
+                if (data.success) {
+                    allProperties = data.data || [];
+                    displayProperties(allProperties);
+                }
+            } catch (e) {
+                content.innerHTML = '<div class="loading">データの読み込みに失敗しました</div>';
+            }
+        }
+
+        function displayProperties(properties) {
+            const content = document.getElementById('content');
+
+            if (!properties.length) {
+                content.innerHTML = '<div class="loading">物件が見つかりませんでした</div>';
+                return;
+            }
+
+            const grid = document.createElement('div');
+            grid.className = 'properties-grid';
+
+            properties.forEach(prop => {
+                grid.appendChild(createPropertyCard(prop));
+            });
+
+            content.innerHTML = '';
+            content.appendChild(grid);
+        }
+
+        function createPropertyCard(prop) {
+            const card = document.createElement('div');
+            card.className = 'property-card';
+
+            const today = new Date().toISOString().split('T')[0];
+            const isNew = prop.first_seen_date === today;
+            const isSold = !prop.is_active;
+
+            const largeImage = prop.images && prop.images.length > 0
+                ? prop.images.find(img => img.includes('large') || img.includes('_l.') || !img.includes('thumb'))
+                : null;
+
+            const imageHtml = largeImage
+                ? `<img src="${largeImage}" alt="${prop.title}" onerror="this.parentElement.innerHTML='<div class=\\'no-image\\'>🏠</div>'">`
+                : '<div class="no-image">🏠</div>';
+
+            const badgeHtml = isNew ? '<span class="badge new">NEW</span>' : (isSold ? '<span class="badge sold">成約済</span>' : '');
+
+            card.innerHTML = `
+                <div class="property-image">
+                    ${imageHtml}
+                    ${badgeHtml}
+                </div>
+                <div class="property-info">
+                    <div class="property-price">${prop.price || '価格未定'}</div>
+                    <div class="property-title">${prop.title || 'タイトルなし'}</div>
+                    <div class="property-meta">
+                        <span class="meta-tag">${prop.category_type}</span>
+                        <span class="meta-tag">${prop.genre_name_ja}</span>
+                    </div>
+                </div>
+            `;
+
+            card.onclick = () => showDetail(prop);
+            return card;
+        }
+
+        function showDetail(prop) {
+            const modal = document.getElementById('propertyModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+
+            const today = new Date().toISOString().split('T')[0];
+            const isNew = prop.first_seen_date === today;
+            const isSold = !prop.is_active;
+
+            const badgeHtml = isNew ? '<span class="badge new">NEW</span>' : (isSold ? '<span class="badge sold">成約済</span>' : '');
+
+            modalTitle.innerHTML = `${prop.title || 'タイトルなし'} ${badgeHtml}`;
+
+            const largeImage = prop.images && prop.images.length > 0
+                ? prop.images.find(img => img.includes('large') || img.includes('_l.') || !img.includes('thumb'))
+                : null;
+
+            let html = '<div class="modal-content-grid"><div>';
+
+            if (largeImage) {
+                html += `<div class="modal-image"><img src="${largeImage}" alt="${prop.title}"></div>`;
+            }
+
+            html += '</div><div class="modal-details">';
+
+            html += `
+                <div class="detail-section">
+                    <h3>基本情報</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">価格</div>
+                        <div class="detail-value">${prop.price || '価格未定'}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">カテゴリー</div>
+                        <div class="detail-value">${prop.category_type} - ${prop.genre_name_ja}</div>
+                    </div>
+                    ${prop.company_name ? `
+                        <div class="detail-row">
+                            <div class="detail-label">取扱会社</div>
+                            <div class="detail-value">${prop.company_name}</div>
+                        </div>
+                    ` : ''}
+                    <div class="detail-row">
+                        <div class="detail-label">初回発見日</div>
+                        <div class="detail-value">${prop.first_seen_date}</div>
+                    </div>
+                </div>
+            `;
+
+            if (prop.property_data && Object.keys(prop.property_data).length > 0) {
+                html += '<div class="detail-section"><h3>物件詳細</h3>';
+                for (const [key, value] of Object.entries(prop.property_data)) {
+                    if (value) {
+                        html += `
+                            <div class="detail-row">
+                                <div class="detail-label">${key}</div>
+                                <div class="detail-value">${value}</div>
+                            </div>
+                        `;
+                    }
+                }
+                html += '</div>';
+            }
+
+            html += `<a href="${prop.url}" target="_blank" class="external-link">元のページを開く →</a>`;
+            html += '</div></div>';
+
+            modalBody.innerHTML = html;
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('propertyModal').classList.remove('active');
+        }
+
+        function setupEventListeners() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentView = tab.dataset.view;
+                    loadProperties();
+                });
+            });
+
+            document.getElementById('propertyModal').addEventListener('click', function (e) {
+                if (e.target === this) closeModal();
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closeModal();
+            });
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

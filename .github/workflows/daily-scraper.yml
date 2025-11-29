@@ -1,0 +1,72 @@
+name: Daily Property Scraper
+
+on:
+  schedule:
+    # 毎日0時JST（UTC 15:00）に実行
+    - cron: '0 15 * * *'
+  
+  # 手動実行も可能
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # 2時間タイムアウト
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install Python dependencies
+        run: |
+          pip install playwright python-dotenv
+          pip install -r requirements.txt || echo "No requirements.txt found"
+      
+      - name: Install Playwright browsers
+        run: |
+          playwright install --with-deps chromium
+      
+      - name: Run scraper
+        env:
+          DATABASE_TYPE: ${{ secrets.DATABASE_TYPE || 'sqlite' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SCRAPER_MAX_WORKERS: 4
+          SCRAPER_MAX_PAGES: 150
+        run: |
+          python integrated_scraper.py --force-refresh
+      
+      - name: Upload scraping logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-logs-${{ github.run_number }}
+          path: logs/
+          retention-days: 7
+      
+      - name: Upload CSV results
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csv-results-${{ github.run_number }}
+          path: output/*.csv
+          retention-days: 30
+      
+      - name: Upload database (SQLite mode)
+        if: success() && env.DATABASE_TYPE == 'sqlite'
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-${{ github.run_number }}
+          path: output/properties.db
+          retention-days: 30
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Scraping failed. Check logs for details."
