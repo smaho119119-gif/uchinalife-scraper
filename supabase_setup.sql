@@ -1,8 +1,8 @@
 -- =====================================================
--- Supabase Database Setup - 既存テーブルを保持
+-- Supabase Database Setup for Property Scraper
 -- =====================================================
 
--- 1. Properties テーブル（存在しない場合のみ作成）
+-- 1. Properties テーブル作成
 CREATE TABLE IF NOT EXISTS properties (
     id BIGSERIAL PRIMARY KEY,
     url TEXT NOT NULL UNIQUE,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS properties (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Daily Link Snapshots テーブル（存在しない場合のみ作成）
+-- 2. Daily Link Snapshots テーブル作成
 CREATE TABLE IF NOT EXISTS daily_link_snapshots (
     id BIGSERIAL PRIMARY KEY,
     snapshot_date DATE NOT NULL,
@@ -36,53 +36,32 @@ CREATE TABLE IF NOT EXISTS daily_link_snapshots (
     UNIQUE(snapshot_date, category)
 );
 
--- 3. Generated Images テーブルの修正
--- まず、既存のテーブルを確認してproperty_idカラムを追加
-DO $$
-BEGIN
-    -- テーブルが存在しない場合は作成
-    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'generated_images') THEN
-        CREATE TABLE generated_images (
-            id BIGSERIAL PRIMARY KEY,
-            property_id BIGINT,
-            image_url TEXT NOT NULL,
-            filename TEXT,
-            mode TEXT,
-            style TEXT,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        );
-    END IF;
-    
-    -- property_idカラムが存在しない場合は追加
-    IF NOT EXISTS (
-        SELECT FROM information_schema.columns 
-        WHERE table_schema = 'public' 
-        AND table_name = 'generated_images' 
-        AND column_name = 'property_id'
-    ) THEN
-        ALTER TABLE generated_images ADD COLUMN property_id BIGINT;
-    END IF;
-END $$;
+-- 3. Generated Images テーブル作成（ダッシュボード用）
+CREATE TABLE IF NOT EXISTS generated_images (
+    id BIGSERIAL PRIMARY KEY,
+    property_id BIGINT,
+    image_url TEXT NOT NULL,
+    filename TEXT,
+    mode TEXT,
+    style TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- 外部キー制約を追加（既に存在する場合はスキップ）
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'generated_images_property_id_fkey'
-    ) THEN
-        ALTER TABLE generated_images 
-        ADD CONSTRAINT generated_images_property_id_fkey 
-        FOREIGN KEY (property_id) 
-        REFERENCES properties(id) 
-        ON DELETE CASCADE;
-    END IF;
-END $$;
+-- 外部キー制約を後から追加
+ALTER TABLE generated_images 
+    DROP CONSTRAINT IF EXISTS generated_images_property_id_fkey;
+
+ALTER TABLE generated_images 
+    ADD CONSTRAINT generated_images_property_id_fkey 
+    FOREIGN KEY (property_id) 
+    REFERENCES properties(id) 
+    ON DELETE CASCADE;
 
 -- =====================================================
--- インデックス作成（存在しない場合のみ）
+-- インデックス作成（パフォーマンス向上）
 -- =====================================================
 
+-- Properties テーブル
 CREATE INDEX IF NOT EXISTS idx_properties_url ON properties(url);
 CREATE INDEX IF NOT EXISTS idx_properties_category ON properties(category);
 CREATE INDEX IF NOT EXISTS idx_properties_is_active ON properties(is_active);
@@ -91,13 +70,15 @@ CREATE INDEX IF NOT EXISTS idx_properties_last_seen ON properties(last_seen_date
 CREATE INDEX IF NOT EXISTS idx_properties_created_at ON properties(created_at);
 CREATE INDEX IF NOT EXISTS idx_properties_category_active ON properties(category, is_active);
 
+-- Daily Link Snapshots テーブル
 CREATE INDEX IF NOT EXISTS idx_snapshots_date_category ON daily_link_snapshots(snapshot_date, category);
 CREATE INDEX IF NOT EXISTS idx_snapshots_date ON daily_link_snapshots(snapshot_date DESC);
 
+-- Generated Images テーブル
 CREATE INDEX IF NOT EXISTS idx_generated_images_property ON generated_images(property_id);
 
 -- =====================================================
--- 自動更新トリガー
+-- 自動更新トリガー（updated_at）
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -108,63 +89,72 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-DROP TRIGGER IF EXISTS update_properties_updated_at ON properties;
 CREATE TRIGGER update_properties_updated_at 
     BEFORE UPDATE ON properties
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
--- Row Level Security (RLS)
+-- Row Level Security (RLS) 設定
 -- =====================================================
 
+-- RLSを有効化
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_link_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generated_images ENABLE ROW LEVEL SECURITY;
 
--- 既存のポリシーを削除
-DROP POLICY IF EXISTS "Allow public read on properties" ON properties;
-DROP POLICY IF EXISTS "Allow public read on snapshots" ON daily_link_snapshots;
-DROP POLICY IF EXISTS "Allow public read on images" ON generated_images;
-DROP POLICY IF EXISTS "Allow authenticated full access on properties" ON properties;
-DROP POLICY IF EXISTS "Allow authenticated full access on snapshots" ON daily_link_snapshots;
-DROP POLICY IF EXISTS "Allow authenticated full access on images" ON generated_images;
+-- 全ユーザーに読み取り権限を付与
+CREATE POLICY "Allow public read access on properties"
+    ON properties FOR SELECT
+    USING (true);
 
--- 新しいポリシーを作成
-CREATE POLICY "Allow public read on properties"
-    ON properties FOR SELECT USING (true);
+CREATE POLICY "Allow public read access on snapshots"
+    ON daily_link_snapshots FOR SELECT
+    USING (true);
 
-CREATE POLICY "Allow public read on snapshots"
-    ON daily_link_snapshots FOR SELECT USING (true);
+CREATE POLICY "Allow public read access on images"
+    ON generated_images FOR SELECT
+    USING (true);
 
-CREATE POLICY "Allow public read on images"
-    ON generated_images FOR SELECT USING (true);
+-- サービスロール（スクレイパー）に全権限を付与
+CREATE POLICY "Allow service role full access on properties"
+    ON properties FOR ALL
+    USING (auth.role() = 'service_role');
 
-CREATE POLICY "Allow authenticated full access on properties"
-    ON properties FOR ALL 
-    USING (auth.role() = 'authenticated' OR auth.role() = 'service_role');
+CREATE POLICY "Allow service role full access on snapshots"
+    ON daily_link_snapshots FOR ALL
+    USING (auth.role() = 'service_role');
 
-CREATE POLICY "Allow authenticated full access on snapshots"
-    ON daily_link_snapshots FOR ALL 
-    USING (auth.role() = 'authenticated' OR auth.role() = 'service_role');
-
-CREATE POLICY "Allow authenticated full access on images"
-    ON generated_images FOR ALL 
-    USING (auth.role() = 'authenticated' OR auth.role() = 'service_role');
+CREATE POLICY "Allow service role full access on images"
+    ON generated_images FOR ALL
+    USING (auth.role() = 'service_role');
 
 -- =====================================================
--- ビュー作成
+-- 便利なビュー作成
 -- =====================================================
 
+-- アクティブな物件のみを表示するビュー
 CREATE OR REPLACE VIEW active_properties AS
 SELECT 
-    id, url, category, category_name_ja, genre_name_ja,
-    title, price, favorites, update_date, company_name,
-    property_data, first_seen_date, last_seen_date,
-    created_at, updated_at
+    id,
+    url,
+    category,
+    category_name_ja,
+    genre_name_ja,
+    title,
+    price,
+    favorites,
+    update_date,
+    company_name,
+    property_data,
+    first_seen_date,
+    last_seen_date,
+    created_at,
+    updated_at
 FROM properties
 WHERE is_active = true;
 
+-- カテゴリ別の統計ビュー
 CREATE OR REPLACE VIEW category_stats AS
 SELECT 
     category,
@@ -176,3 +166,16 @@ SELECT
     MAX(updated_at) as last_updated
 FROM properties
 GROUP BY category, category_name_ja;
+
+-- =====================================================
+-- 完了メッセージ
+-- =====================================================
+
+DO $$
+BEGIN
+    RAISE NOTICE '✅ Database setup completed successfully!';
+    RAISE NOTICE 'Tables created: properties, daily_link_snapshots, generated_images';
+    RAISE NOTICE 'Indexes created for optimal performance';
+    RAISE NOTICE 'RLS policies configured';
+    RAISE NOTICE 'Views created: active_properties, category_stats';
+END $$;
