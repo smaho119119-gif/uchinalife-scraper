@@ -65,3 +65,13 @@ sales-dashboard/.env.local
 debug_*.html
 debug_*.txt
 test_*.py
+sales-dashboard/
+
+# Large files
+*.tar.gz
+*.zip
+output/
+data/
+FileMaker/
+*.db
+*.db-journal
