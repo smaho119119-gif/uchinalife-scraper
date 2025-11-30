@@ -75,3 +75,4 @@ data/
 FileMaker/
 *.db
 *.db-journal
+backups/

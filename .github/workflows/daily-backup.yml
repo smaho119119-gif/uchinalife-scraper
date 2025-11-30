@@ -1,0 +1,112 @@
+name: Daily Database Backup
+
+on:
+  schedule:
+    # 毎日1時JST（UTC 16:00）にバックアップ（スクレイピングの1時間後）
+    - cron: '0 16 * * *'
+  
+  # 手動実行も可能
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install supabase pandas
+      
+      - name: Create backup script
+        run: |
+          cat > backup.py << 'EOF'
+          import os
+          import json
+          from datetime import datetime
+          from supabase import create_client
+          import pandas as pd
+          
+          # Supabase接続
+          url = os.environ['SUPABASE_URL']
+          key = os.environ['SUPABASE_ANON_KEY']
+          supabase = create_client(url, key)
+          
+          # バックアップディレクトリ作成
+          os.makedirs('backups', exist_ok=True)
+          
+          # タイムスタンプ
+          timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+          
+          print(f"🔄 Starting backup at {timestamp}")
+          
+          # 全物件データを取得
+          print("📊 Fetching all properties...")
+          response = supabase.table('properties').select('*').execute()
+          properties = response.data
+          
+          print(f"✅ Found {len(properties)} properties")
+          
+          # JSON形式で保存
+          json_file = f'backups/properties_backup_{timestamp}.json'
+          with open(json_file, 'w', encoding='utf-8') as f:
+              json.dump(properties, f, ensure_ascii=False, indent=2)
+          print(f"💾 Saved JSON: {json_file}")
+          
+          # CSV形式で保存
+          csv_file = f'backups/properties_backup_{timestamp}.csv'
+          df = pd.DataFrame(properties)
+          df.to_csv(csv_file, index=False, encoding='utf-8-sig')
+          print(f"💾 Saved CSV: {csv_file}")
+          
+          # 統計情報
+          stats = {
+              'timestamp': timestamp,
+              'total_properties': len(properties),
+              'categories': df['category'].value_counts().to_dict() if 'category' in df.columns else {},
+              'active_properties': len(df[df['is_active'] == True]) if 'is_active' in df.columns else 0
+          }
+          
+          stats_file = f'backups/backup_stats_{timestamp}.json'
+          with open(stats_file, 'w', encoding='utf-8') as f:
+              json.dump(stats, f, ensure_ascii=False, indent=2)
+          print(f"📈 Saved stats: {stats_file}")
+          
+          print("✅ Backup completed successfully!")
+          EOF
+      
+      - name: Run backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          python backup.py
+      
+      - name: Upload backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-backup-${{ github.run_number }}
+          path: backups/
+          retention-days: 90  # 90日間保存
+      
+      - name: Commit backup to repository (optional)
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add backups/ || true
+          git commit -m "🔄 Auto backup $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          git push || echo "Nothing to push"
+        continue-on-error: true
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Backup failed. Check logs for details."
