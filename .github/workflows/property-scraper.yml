@@ -11,7 +11,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-22.04  # Use 22.04 for better Playwright compatibility
-    timeout-minutes: 120  # 2時間タイムアウト
+    timeout-minutes: 180  # 3時間タイムアウト
     
     steps:
       - name: Checkout code
