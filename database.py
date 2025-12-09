@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_TYPE: str = os.getenv("DATABASE_TYPE", "sqlite")  # "sqlite" or "supabase"
+DATABASE_TYPE: str = os.getenv("DATABASE_TYPE", "supabase")  # "sqlite" or "supabase"
 SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "output/properties.db")
 
 
