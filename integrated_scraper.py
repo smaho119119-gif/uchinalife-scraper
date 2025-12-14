@@ -1,10 +1,11 @@
 import os
+import sys
 import time
 import random
 import json
 import argparse
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 from fake_useragent import UserAgent
@@ -942,6 +943,119 @@ def detect_diff(category: str, current_urls: list) -> tuple:
     
     return new_urls, sold_urls
 
+def auto_diagnose_and_fix(total_scraped: int, max_retries: int = 2):
+    """
+    スクレイピング完了後に自動診断し、エラーが検出された場合は自動的に再実行
+    max_retries: 最大再試行回数（無限ループを防ぐ）
+    """
+    print(f"\n{'='*70}")
+    print("自動診断を開始します...")
+    print(f"{'='*70}\n")
+    
+    # 再試行回数をチェック（環境変数から取得、デフォルトは0）
+    try:
+        retry_count = max(0, int(os.getenv("AUTO_RETRY_COUNT", "0")))  # 負の値を0に正規化
+    except (ValueError, TypeError):
+        retry_count = 0  # 無効な値の場合は0に設定
+    
+    if retry_count >= max_retries:
+        print(f"⚠️  最大再試行回数（{max_retries}回）に達しました。自動修正をスキップします。")
+        return
+    
+    if db.db_type != "supabase":
+        print("⚠️  データベースタイプがSupabaseではないため、自動診断をスキップします。")
+        return
+    
+    try:
+        # スクレイピング実行時刻の前後30分の範囲で確認
+        # GitHub ActionsはUTCで実行されるため、UTC時刻を使用
+        now = datetime.now(timezone.utc)
+        check_start = (now - timedelta(minutes=30)).isoformat()
+        check_end = (now + timedelta(minutes=30)).isoformat()
+        
+        result = db.supabase.table("properties")\
+            .select("*", count="exact", head=True)\
+            .gte("created_at", check_start)\
+            .lte("created_at", check_end)\
+            .execute()
+        
+        saved_count = result.count if hasattr(result, 'count') else (len(result.data) if result.data else 0)
+        
+        print(f"📊 診断結果:")
+        print(f"   スクレイピング件数: {total_scraped}件")
+        print(f"   Supabase保存件数: {saved_count}件")
+        print(f"   チェック範囲: {check_start} 〜 {check_end}")
+        
+        if total_scraped == 0:
+            print("   ✓ スクレイピング件数が0件のため、診断をスキップします。")
+            return
+        
+        # 異常ケース: 保存件数がスクレイピング件数を超える場合
+        if saved_count > total_scraped:
+            print(f"   ⚠️  警告: 保存件数（{saved_count}件）がスクレイピング件数（{total_scraped}件）を超えています。")
+            print(f"   これは、タイムゾーン範囲内に他の実行のデータが含まれている可能性があります。")
+            print(f"   チェック範囲を確認してください。")
+        
+        save_rate = (saved_count / total_scraped * 100) if total_scraped > 0 else 0
+        print(f"   保存率: {save_rate:.1f}%")
+        
+        # エラー判定: 保存率が10%未満の場合
+        if save_rate < 10:
+            print(f"\n❌ エラー検出: 保存率が10%未満です（{save_rate:.1f}%）")
+            print(f"   自動的に再スクレイピングを実行します...")
+            print(f"   再試行回数: {retry_count + 1}/{max_retries}")
+            
+            # 環境変数を設定して再実行
+            # GitHub Actions環境では環境変数を明示的に設定
+            retry_env = os.environ.copy()
+            retry_env["AUTO_RETRY_COUNT"] = str(retry_count + 1)
+            
+            # 再スクレイピングを実行（--no-diffオプションで全件スクレイピング）
+            import subprocess
+            import sys
+            
+            script_path = os.path.abspath(__file__)
+            command = [
+                sys.executable,
+                script_path,
+                "--no-diff",  # 差分検出をスキップして全件スクレイピング
+                "--skip-refresh",  # リンクは再収集しない（既存リンクを使用）
+            ]
+            
+            print(f"\n🔄 再スクレイピングを開始します...")
+            print(f"   コマンド: {' '.join(command)}")
+            print(f"   環境変数 AUTO_RETRY_COUNT: {retry_env.get('AUTO_RETRY_COUNT', '0')}")
+            
+            # 再実行（環境変数を引き継ぐ）
+            result = subprocess.run(
+                command,
+                cwd=os.path.dirname(script_path),
+                env=retry_env,  # 環境変数を明示的に渡す
+                capture_output=False,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                print(f"\n✓ 再スクレイピングが正常に完了しました。")
+            else:
+                print(f"\n❌ 再スクレイピングが失敗しました（終了コード: {result.returncode}）")
+                # GitHub Actions環境では失敗時にエラーを出力
+                if os.getenv("GITHUB_ACTIONS"):
+                    print(f"::error::自動再スクレイピングが失敗しました（終了コード: {result.returncode}）")
+        else:
+            print(f"\n✓ 診断結果: 正常（保存率: {save_rate:.1f}%）")
+            print(f"   自動修正は不要です。")
+    
+    except Exception as e:
+        print(f"\n❌ 自動診断中にエラーが発生しました: {e}")
+        import traceback
+        traceback.print_exc()
+        # GitHub Actions環境ではエラーを出力
+        if os.getenv("GITHUB_ACTIONS"):
+            print(f"::error::自動診断中にエラーが発生しました: {e}")
+        # エラーが発生してもスクレイピング自体は成功として扱う
+        return
+
 # --- Main Execution ---
 def main():
     # Parse command line arguments
@@ -1017,21 +1131,21 @@ def main():
     # Create a single executor for all categories to reuse threads/browsers
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         for cat_name, links in all_links.items():
-            print(f"\n{'='*70}")
-            print(f"Processing Category: {cat_name} ({GENRE_NAMES[cat_name]})")
-            print(f"{'='*70}")
-            print(f"Total URLs: {len(links)}")
+            print(f"\n{'='*70}", flush=True)
+            print(f"Processing Category: {cat_name} ({GENRE_NAMES[cat_name]})", flush=True)
+            print(f"{'='*70}", flush=True)
+            print(f"Total URLs: {len(links)}", flush=True)
             
             # Save today's link snapshot to database
             db.save_link_snapshot(cat_name, links)
-            print(f"✓ Saved link snapshot to database")
+            print(f"✓ Saved link snapshot to database", flush=True)
             
             # Detect diff (new and sold properties)
             if not args.no_diff:
                 new_urls, sold_urls = detect_diff(cat_name, links)
-                print(f"\n📊 Diff Detection:")
-                print(f"  New properties: {len(new_urls)}")
-                print(f"  Sold properties: {len(sold_urls)}")
+                print(f"\n📊 Diff Detection:", flush=True)
+                print(f"  New properties: {len(new_urls)}", flush=True)
+                print(f"  Sold properties: {len(sold_urls)}", flush=True)
                 
                 total_new += len(new_urls)
                 total_sold += len(sold_urls)
@@ -1039,12 +1153,12 @@ def main():
                 # Mark sold properties as inactive in database
                 if sold_urls:
                     marked = db.mark_properties_inactive(sold_urls)
-                    print(f"  ✓ Marked {marked} properties as sold")
+                    print(f"  ✓ Marked {marked} properties as sold", flush=True)
                 
                 # Only scrape NEW properties
                 urls_to_scrape = new_urls
             else:
-                print(f"\n⚠️  Diff detection skipped - will scrape all {len(links)} URLs")
+                print(f"\n⚠️  Diff detection skipped - will scrape all {len(links)} URLs", flush=True)
                 urls_to_scrape = links
             
             # Load checkpoint
@@ -1052,60 +1166,77 @@ def main():
             if processed_urls:
                 original_count = len(urls_to_scrape)
                 urls_to_scrape = [u for u in urls_to_scrape if u not in processed_urls]
-                print(f"  Skipping {original_count - len(urls_to_scrape)} already processed URLs (from checkpoint)")
+                print(f"  Skipping {original_count - len(urls_to_scrape)} already processed URLs (from checkpoint)", flush=True)
 
             if not urls_to_scrape:
-                print(f"\n✓ No new properties to scrape for {cat_name}")
+                print(f"\n✓ No new properties to scrape for {cat_name}", flush=True)
                 continue
             
-            print(f"\n🔍 Scraping {len(urls_to_scrape)} properties...\n")
+            print(f"\n🔍 Scraping {len(urls_to_scrape)} properties for {cat_name}...", flush=True)
+            sys.stdout.flush()
             
             # Scrape and save to database
             scraped_count = 0
             error_count = 0
             
-            # Create scraping function (captures cat_name)
-            def scrape_with_retry(url):
-                return retry_with_backoff(lambda: scrape_detail(url, cat_name))
-            
-            future_to_url = {executor.submit(scrape_with_retry, url): url for url in urls_to_scrape}
-            
-            for future in as_completed(future_to_url):
-                url = future_to_url[future]
-                try:
-                    data = future.result()
-                    if data and "error" not in data:
-                        # Transform to database format
-                        db_record = transform_to_db_format(data, cat_name)
-                        
-                        # Save to database
-                        if db.upsert_property(db_record):
-                            scraped_count += 1
-                            # Update checkpoint
-                            processed_urls.add(url)
-                            if len(processed_urls) % 10 == 0:
-                                save_checkpoint(CHECKPOINT_FILE, cat_name, processed_urls)
+            try:
+                # Create scraping function with explicit cat_name capture to avoid closure issues
+                current_category = cat_name  # Capture category name explicitly
+                
+                def make_scrape_func(category):
+                    """Factory function to properly capture category in closure"""
+                    def scrape_with_retry(url):
+                        return retry_with_backoff(lambda: scrape_detail(url, category))
+                    return scrape_with_retry
+                
+                scrape_func = make_scrape_func(current_category)
+                
+                print(f"  Submitting {len(urls_to_scrape)} URLs to thread pool...", flush=True)
+                future_to_url = {executor.submit(scrape_func, url): url for url in urls_to_scrape}
+                print(f"  Submitted. Waiting for completion...", flush=True)
+                
+                for future in as_completed(future_to_url):
+                    url = future_to_url[future]
+                    try:
+                        data = future.result()
+                        if data and "error" not in data:
+                            # Transform to database format
+                            db_record = transform_to_db_format(data, current_category)
+                            
+                            # Save to database
+                            if db.upsert_property(db_record):
+                                scraped_count += 1
+                                # Update checkpoint
+                                processed_urls.add(url)
+                                if len(processed_urls) % 10 == 0:
+                                    save_checkpoint(CHECKPOINT_FILE, current_category, processed_urls)
+                            else:
+                                error_count += 1
                         else:
                             error_count += 1
-                    else:
+                            
+                    except Exception as exc:
+                        print(f"  ✗ Error scraping {url}: {exc}", flush=True)
                         error_count += 1
-                        
-                except Exception as exc:
-                    print(f"  ✗ Error scraping {url}: {exc}")
-                    error_count += 1
+                    
+                    # Progress update (every 10 items)
+                    if (scraped_count + error_count) % 10 == 0:
+                        print(f"  Progress: {scraped_count + error_count}/{len(urls_to_scrape)} (Success: {scraped_count}, Errors: {error_count})", flush=True)
                 
-                # Progress update
-                if (scraped_count + error_count) % 10 == 0:
-                    print(f"  Progress: {scraped_count + error_count}/{len(urls_to_scrape)} (Success: {scraped_count}, Errors: {error_count})")
-            
-            # Final checkpoint save for this category
-            save_checkpoint(CHECKPOINT_FILE, cat_name, processed_urls)
+                # Final checkpoint save for this category
+                save_checkpoint(CHECKPOINT_FILE, current_category, processed_urls)
+                
+            except Exception as loop_error:
+                print(f"\n❌ Critical error in scraping loop for {cat_name}: {loop_error}", flush=True)
+                import traceback
+                traceback.print_exc()
+                sys.stdout.flush()
             
             total_scraped += scraped_count
             
-            print(f"\n✓ Category {cat_name} complete:")
-            print(f"  Scraped: {scraped_count}")
-            print(f"  Errors: {error_count}")
+            print(f"\n✓ Category {cat_name} complete:", flush=True)
+            print(f"  Scraped: {scraped_count}", flush=True)
+            print(f"  Errors: {error_count}", flush=True)
 
         # Cleanup threads
         print("\nCleaning up worker threads...")
@@ -1119,18 +1250,21 @@ def main():
                 pass
     
     # Final summary
-    print(f"\n{'='*70}")
-    print("SCRAPING COMPLETE")
-    print(f"{'='*70}")
-    print(f"Total new properties: {total_new}")
-    print(f"Total sold properties: {total_sold}")
-    print(f"Total scraped: {total_scraped}")
-    print(f"Database: {db.db_type.upper()}")
-    print(f"Database: {db.db_type.upper()}")
-    print(f"{'='*70}\n")
+    print(f"\n{'='*70}", flush=True)
+    print("SCRAPING COMPLETE", flush=True)
+    print(f"{'='*70}", flush=True)
+    print(f"Total new properties: {total_new}", flush=True)
+    print(f"Total sold properties: {total_sold}", flush=True)
+    print(f"Total scraped: {total_scraped}", flush=True)
+    print(f"Database: {db.db_type.upper()}", flush=True)
+    print(f"{'='*70}\n", flush=True)
     
     # Export to CSV
     export_to_csv()
+    
+    # Auto-diagnosis and auto-fix
+    if db.db_type == "supabase":
+        auto_diagnose_and_fix(total_scraped)
 
 if __name__ == "__main__":
     main()
