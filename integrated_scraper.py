@@ -1010,7 +1010,7 @@ def auto_diagnose_and_fix(total_scraped: int, max_retries: int = 2):
             retry_env = os.environ.copy()
             retry_env["AUTO_RETRY_COUNT"] = str(retry_count + 1)
             
-            # 再スクレイピングを実行（--no-diffオプションで全件スクレイピング）
+            # 再スクレイピングを実行（差分のみをスクレイピング）
             import subprocess
             import sys
             
@@ -1018,11 +1018,12 @@ def auto_diagnose_and_fix(total_scraped: int, max_retries: int = 2):
             command = [
                 sys.executable,
                 script_path,
-                "--no-diff",  # 差分検出をスキップして全件スクレイピング
+                # 重要: --no-diffを使用しない（差分のみスクレイピング）
+                # 全件スクレイピングは5-6時間かかるため絶対に避ける
                 "--skip-refresh",  # リンクは再収集しない（既存リンクを使用）
             ]
             
-            print(f"\n🔄 再スクレイピングを開始します...")
+            print(f"\n🔄 再スクレイピングを開始します（差分のみ）...")
             print(f"   コマンド: {' '.join(command)}")
             print(f"   環境変数 AUTO_RETRY_COUNT: {retry_env.get('AUTO_RETRY_COUNT', '0')}")
             
