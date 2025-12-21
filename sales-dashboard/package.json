@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "ls -R src",
+    "prebuild": "echo 'Checking src structure' && find src -maxdepth 3",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
