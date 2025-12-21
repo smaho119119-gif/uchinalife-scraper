@@ -323,15 +323,25 @@ class Database:
         if not urls:
             return 0
         
-        try:
-            result = self.supabase.table("properties")\
-                .update({"is_active": False, "last_seen_date": date.today().isoformat()})\
-                .in_("url", urls)\
-                .execute()
-            return len(result.data) if result.data else 0
-        except Exception as e:
-            print(f"Error marking properties inactive: {e}")
-            return 0
+        # Supabaseの制限を避けるため、100件ずつバッチ処理
+        BATCH_SIZE = 100
+        total_marked = 0
+        
+        for i in range(0, len(urls), BATCH_SIZE):
+            batch_urls = urls[i:i + BATCH_SIZE]
+            try:
+                result = self.supabase.table("properties")\
+                    .update({"is_active": False, "last_seen_date": date.today().isoformat()})\
+                    .in_("url", batch_urls)\
+                    .execute()
+                batch_count = len(result.data) if result.data else 0
+                total_marked += batch_count
+            except Exception as e:
+                print(f"Error marking properties inactive (batch {i//BATCH_SIZE + 1}): {e}")
+                # エラーが発生しても次のバッチを続行
+                continue
+        
+        return total_marked
     
     # ================================================================
     # QUERY METHODS
@@ -544,7 +554,67 @@ class Database:
     
     def _get_area_distribution_supabase(self) -> Dict[str, int]:
         """Supabase area distribution"""
-        return {}
+        import re
+        
+        area_counts = {}
+        page_size = 1000
+        from_idx = 0
+        
+        def extract_city_name(location_str: str) -> str:
+            """所在地文字列から市区町村名を抽出"""
+            if not location_str or location_str == '不明':
+                return '不明'
+            
+            # 「沖縄県」を削除
+            location_str = location_str.replace('沖縄県', '').strip()
+            
+            # 市区町村名を抽出（例: "那覇市"、"北谷町"、"読谷村"）
+            match = re.search(r'([^市]+市|[^町]+町|[^村]+村)', location_str)
+            if match:
+                return match.group(1)
+            
+            # 市区町村名が見つからない場合は、最初の部分を返す
+            parts = location_str.split()
+            if parts:
+                return parts[0]
+            
+            return '不明'
+        
+        while True:
+            result = self.supabase.table("properties")\
+                .select("property_data")\
+                .eq("is_active", True)\
+                .range(from_idx, from_idx + page_size - 1)\
+                .execute()
+            
+            if not result.data or len(result.data) == 0:
+                break
+            
+            for item in result.data:
+                pd = item.get("property_data", {})
+                if isinstance(pd, dict):
+                    # 「所在地」または「住所」フィールドを探す
+                    location = None
+                    for key in ['所在地', '住所', 'location', 'area', 'city']:
+                        if key in pd and pd[key]:
+                            location = str(pd[key]).strip()
+                            break
+                    
+                    if not location or location == '':
+                        location = '不明'
+                    
+                    # 市区町村名を抽出
+                    city = extract_city_name(location)
+                    area_counts[city] = area_counts.get(city, 0) + 1
+            
+            if len(result.data) < page_size:
+                break
+            
+            from_idx += page_size
+        
+        # 件数でソートして上位10件を返す
+        sorted_areas = sorted(area_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        return dict(sorted_areas)
     
     def get_time_based_statistics(self) -> Dict[str, Any]:
         """Get time-based statistics (today, this week, this month)"""

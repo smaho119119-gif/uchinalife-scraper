@@ -76,3 +76,6 @@ FileMaker/
 *.db
 *.db-journal
 backups/
+
+# YoYo AI version control directory
+.yoyo/

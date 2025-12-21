@@ -13,7 +13,15 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-22.04  # Use 22.04 for better Playwright compatibility
-    timeout-minutes: 180  # 3時間タイムアウト
+    timeout-minutes: 240  # 4時間タイムアウト（自動再実行を考慮して延長）
+    
+    env:
+      DATABASE_TYPE: ${{ secrets.DATABASE_TYPE || 'supabase' }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SCRAPER_MAX_WORKERS: 4
+      SCRAPER_MAX_PAGES: 150
+      AUTO_RETRY_COUNT: 0  # 自動再試行回数の初期値
     
     steps:
       - name: Checkout code
@@ -57,12 +65,6 @@ jobs:
           playwright install chromium
       
       - name: Run scraper
-        env:
-          DATABASE_TYPE: ${{ secrets.DATABASE_TYPE || 'sqlite' }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SCRAPER_MAX_WORKERS: 4
-          SCRAPER_MAX_PAGES: 150
         run: |
           python integrated_scraper.py --force-refresh
       
@@ -83,7 +85,7 @@ jobs:
           retention-days: 30
       
       - name: Upload database (SQLite mode)
-        if: success() && env.DATABASE_TYPE == 'sqlite'
+        if: ${{ success() && env.DATABASE_TYPE == 'sqlite' }}
         uses: actions/upload-artifact@v4
         with:
           name: database-${{ github.run_number }}

@@ -90,7 +90,7 @@ class Config:
     # =====================================================
     # データベース設定
     # =====================================================
-    DATABASE_TYPE: str = os.getenv("DATABASE_TYPE", "sqlite")
+    DATABASE_TYPE: str = os.getenv("DATABASE_TYPE", "supabase")
     SQLITE_DB_PATH: str = os.getenv("SQLITE_DB_PATH", "output/properties.db")
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")

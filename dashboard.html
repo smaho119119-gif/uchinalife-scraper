@@ -296,6 +296,7 @@
             margin-bottom: 12px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
+            line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
             min-height: 42px;
@@ -592,7 +593,8 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:5001';
+        // 現在のページのオリジンを使用（.envで設定したポートに自動対応）
+        const API_BASE = window.location.origin;
         let currentView = 'all';
         let allProperties = [];
         let charts = {};
