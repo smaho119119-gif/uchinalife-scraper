@@ -1,0 +1,668 @@
+"use client";
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sparkles, Copy, ExternalLink, Image as ImageIcon, Loader2, ArrowLeft, Calendar, Heart, History, RotateCcw } from 'lucide-react';
+
+interface CopyHistory {
+    id: number;
+    copy_text: string;
+    created_at: string;
+    is_active: number;
+}
+
+export default function PropertyDetailPage() {
+    const params = useParams();
+    const router = useRouter();
+    const url = decodeURIComponent(Array.isArray(params.url) ? params.url.join('/') : params.url as string);
+
+    const [property, setProperty] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [aiCopy, setAiCopy] = useState("");
+    const [generating, setGenerating] = useState(false);
+    const [selectedImage, setSelectedImage] = useState(0);
+    const [copyHistory, setCopyHistory] = useState<CopyHistory[]>([]);
+    const [showHistory, setShowHistory] = useState(false);
+
+    // Image generation state
+    const [generatingImage, setGeneratingImage] = useState(false);
+    const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+    const [imageGallery, setImageGallery] = useState<Array<{ url: string, mode: string, style: string, timestamp: number }>>([]);
+    const [imageMode, setImageMode] = useState('sns_banner');
+    const [imageStyle, setImageStyle] = useState('modern');
+    const [imageSize, setImageSize] = useState('2K');
+    const [imageAspectRatio, setImageAspectRatio] = useState('16:9');
+
+    // Property image selection
+    const [selectedPropertyImages, setSelectedPropertyImages] = useState<string[]>([]);
+    const [staffPhoto, setStaffPhoto] = useState<string | null>(null);
+    const [staffPhotoFile, setStaffPhotoFile] = useState<File | null>(null);
+
+    useEffect(() => {
+        fetch(`/api/properties/${encodeURIComponent(url)}`)
+            .then(res => res.json())
+            .then(data => {
+                setProperty(data);
+                setLoading(false);
+            });
+
+        // Load history
+        loadHistory();
+    }, [url]);
+
+    const loadHistory = async () => {
+        try {
+            const res = await fetch('/api/ai/history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json();
+            setCopyHistory(data.history || []);
+
+            // Set the most recent copy as current
+            if (data.history && data.history.length > 0) {
+                setAiCopy(data.history[0].copy_text);
+            }
+        } catch (e) {
+            console.error("Failed to load history");
+        }
+    };
+
+    const handleGenerateCopy = async () => {
+        setGenerating(true);
+        try {
+            const res = await fetch('/api/ai/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: property.url })
+            });
+            const data = await res.json();
+            setAiCopy(data.copy);
+
+            // Reload history to show the new entry
+            await loadHistory();
+        } catch (e) {
+            alert("Failed to generate copy");
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    const handleGenerateImage = async () => {
+        setGeneratingImage(true);
+        try {
+            // Prepare form data for multipart upload
+            const formData = new FormData();
+            formData.append('url', property.url);
+            formData.append('mode', imageMode);
+            formData.append('style', imageStyle);
+            formData.append('size', imageSize);
+            formData.append('aspectRatio', imageAspectRatio);
+            formData.append('propertyImages', JSON.stringify(selectedPropertyImages));
+
+            if (staffPhotoFile) {
+                formData.append('staffPhoto', staffPhotoFile);
+            }
+
+            const res = await fetch('/api/ai/generate-image', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await res.json();
+
+            if (data.imageUrl) {
+                // Use the local file URL
+                setGeneratedImage(data.imageUrl);
+
+                // Add to gallery
+                setImageGallery(prev => [{
+                    url: data.imageUrl,
+                    mode: imageMode,
+                    style: imageStyle,
+                    timestamp: Date.now()
+                }, ...prev]);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Failed to generate image");
+        } finally {
+            setGeneratingImage(false);
+        }
+    };
+
+    const handleStaffPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setStaffPhotoFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setStaffPhoto(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const togglePropertyImage = (imageUrl: string) => {
+        setSelectedPropertyImages(prev =>
+            prev.includes(imageUrl)
+                ? prev.filter(url => url !== imageUrl)
+                : [...prev, imageUrl]
+        );
+    };
+
+    const restoreVersion = (copyText: string) => {
+        setAiCopy(copyText);
+        setShowHistory(false);
+    };
+
+    if (loading) return (
+        <div className="flex items-center justify-center min-h-screen bg-slate-950">
+            <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+        </div>
+    );
+
+    if (!property) return (
+        <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
+            物件が見つかりませんでした
+        </div>
+    );
+
+    const images = property.images && property.images.length > 0 ? property.images : [];
+
+    return (
+        <div className="min-h-screen bg-slate-950">
+            {/* Hero Section with Image Gallery */}
+            <div className="relative w-full bg-slate-900">
+                <Button
+                    variant="ghost"
+                    className="absolute top-4 left-4 z-10 bg-slate-900/80 backdrop-blur-sm text-white hover:bg-slate-800"
+                    onClick={() => router.back()}
+                >
+                    <ArrowLeft className="mr-2 h-4 w-4" /> 戻る
+                </Button>
+
+                {images.length > 0 ? (
+                    <div className="relative">
+                        <div className="aspect-[21/9] md:aspect-[21/7] lg:aspect-[21/6] w-full overflow-hidden bg-slate-950">
+                            <img
+                                src={images[selectedImage]}
+                                alt={property.title}
+                                className="w-full h-full object-cover"
+                            />
+                        </div>
+
+                        {/* Thumbnail Gallery */}
+                        {images.length > 1 && (
+                            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2 p-2 bg-slate-900/80 backdrop-blur-md rounded-lg">
+                                {images.slice(0, 6).map((img: string, idx: number) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => setSelectedImage(idx)}
+                                        className={`w-16 h-16 md:w-20 md:h-20 rounded overflow-hidden border-2 transition-all ${selectedImage === idx ? 'border-emerald-500 scale-110' : 'border-slate-700 opacity-60 hover:opacity-100'
+                                            }`}
+                                    >
+                                        <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                                    </button>
+                                ))}
+                                {images.length > 6 && (
+                                    <div className="w-16 h-16 md:w-20 md:h-20 rounded bg-slate-800 flex items-center justify-center text-slate-400 text-xs">
+                                        +{images.length - 6}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="aspect-[21/9] md:aspect-[21/7] lg:aspect-[21/6] w-full bg-slate-950 flex items-center justify-center">
+                        <div className="text-slate-500 flex flex-col items-center">
+                            <ImageIcon className="h-16 w-16 mb-4" />
+                            <p>画像なし</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Content */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Column: Property Info */}
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Title & Price */}
+                        <Card className="bg-slate-900 border-slate-800">
+                            <CardHeader>
+                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                                    <div className="flex-1">
+                                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                                            <Badge variant="outline" className="text-slate-300 border-slate-700">
+                                                {property.category_name_ja}
+                                            </Badge>
+                                            <Badge variant="outline" className="text-slate-300 border-slate-700">
+                                                {property.genre_name_ja}
+                                            </Badge>
+                                            <Badge className={property.is_active ? "bg-emerald-900 text-emerald-200" : "bg-red-900 text-red-200"}>
+                                                {property.is_active ? "販売中" : "成約済"}
+                                            </Badge>
+                                        </div>
+                                        <CardTitle className="text-2xl md:text-3xl text-white mb-2">{property.title}</CardTitle>
+                                        <div className="flex items-center text-slate-400 text-sm space-x-4">
+                                            <span className="flex items-center">
+                                                <Calendar className="h-4 w-4 mr-1" />
+                                                {property.first_seen_date}
+                                            </span>
+                                            <span className="flex items-center">
+                                                <Heart className="h-4 w-4 mr-1" />
+                                                {property.favorites || 0}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-3xl md:text-4xl font-bold text-emerald-400">{property.price}</div>
+                                        <a href={property.url} target="_blank" rel="noopener noreferrer">
+                                            <Button variant="outline" size="sm" className="mt-2 border-slate-700 text-slate-300 hover:bg-slate-800">
+                                                <ExternalLink className="mr-2 h-4 w-4" /> 元のページ
+                                            </Button>
+                                        </a>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                        </Card>
+
+                        {/* Property Details */}
+                        <Card className="bg-slate-900 border-slate-800">
+                            <CardHeader>
+                                <CardTitle className="text-white">物件詳細情報</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {Object.entries(property.property_data).map(([key, value]: [string, any]) => (
+                                        <div key={key} className="border-b border-slate-800 pb-3">
+                                            <p className="text-xs text-slate-500 mb-1">{key}</p>
+                                            <p className="text-sm text-slate-200 font-medium">{value}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-6 pt-4 border-t border-slate-800">
+                                    <p className="text-xs text-slate-500 mb-1">不動産会社</p>
+                                    <p className="text-sm text-slate-200 font-medium">{property.company_name}</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Right Column: AI Tools */}
+                    <div className="space-y-6">
+                        <Card className="bg-slate-900 border-slate-800 sticky top-20">
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="flex items-center text-white">
+                                            <Sparkles className="mr-2 h-5 w-5 text-purple-500" />
+                                            AI営業アシスタント
+                                        </CardTitle>
+                                        <CardDescription className="text-slate-400">
+                                            営業資料を瞬時に生成します
+                                        </CardDescription>
+                                    </div>
+                                    {copyHistory.length > 0 && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowHistory(!showHistory)}
+                                            className="text-slate-400 hover:text-white"
+                                        >
+                                            <History className="h-4 w-4 mr-1" />
+                                            履歴 ({copyHistory.length})
+                                        </Button>
+                                    )}
+                                </div>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {showHistory ? (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h3 className="text-sm font-semibold text-white">生成履歴</h3>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setShowHistory(false)}
+                                                className="text-slate-400"
+                                            >
+                                                閉じる
+                                            </Button>
+                                        </div>
+                                        <div className="max-h-[500px] overflow-y-auto space-y-2">
+                                            {copyHistory.map((item, idx) => (
+                                                <Card key={item.id} className="bg-slate-950 border-slate-700 hover:border-emerald-600 transition-colors cursor-pointer">
+                                                    <CardContent className="p-3" onClick={() => restoreVersion(item.copy_text)}>
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <span className="text-xs text-slate-500">
+                                                                {new Date(item.created_at).toLocaleString('ja-JP')}
+                                                            </span>
+                                                            {idx === 0 && (
+                                                                <Badge className="bg-emerald-900 text-emerald-200 text-xs">最新</Badge>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-slate-300 line-clamp-3">
+                                                            {item.copy_text.substring(0, 100)}...
+                                                        </p>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="mt-2 w-full text-xs text-blue-400 hover:text-blue-300"
+                                                        >
+                                                            <RotateCcw className="h-3 w-3 mr-1" /> この版を使用
+                                                        </Button>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <Tabs defaultValue="copy" className="w-full">
+                                        <TabsList className="grid w-full grid-cols-2 bg-slate-800">
+                                            <TabsTrigger value="copy">セールスコピー</TabsTrigger>
+                                            <TabsTrigger value="image">画像生成</TabsTrigger>
+                                        </TabsList>
+
+                                        <TabsContent value="copy" className="space-y-4 mt-4">
+                                            <Button
+                                                onClick={handleGenerateCopy}
+                                                disabled={generating}
+                                                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0"
+                                            >
+                                                {generating ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 生成中...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Sparkles className="mr-2 h-4 w-4" /> セールスコピーを生成
+                                                    </>
+                                                )}
+                                            </Button>
+
+                                            {aiCopy && (
+                                                <div className="space-y-2">
+                                                    <Tabs defaultValue="preview" className="w-full">
+                                                        <TabsList className="grid w-full grid-cols-2 bg-slate-800">
+                                                            <TabsTrigger value="preview">プレビュー</TabsTrigger>
+                                                            <TabsTrigger value="raw">テキスト</TabsTrigger>
+                                                        </TabsList>
+
+                                                        <TabsContent value="preview" className="mt-2">
+                                                            <div className="min-h-[300px] max-h-[500px] overflow-y-auto bg-slate-950 border border-slate-800 rounded-md p-4">
+                                                                <div className="prose prose-invert prose-sm max-w-none prose-headings:text-emerald-400 prose-headings:font-bold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg prose-p:text-slate-300 prose-p:leading-relaxed prose-strong:text-white prose-strong:font-semibold prose-ul:text-slate-300 prose-ol:text-slate-300 prose-li:marker:text-emerald-500 prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-code:text-emerald-400 prose-code:bg-slate-900 prose-code:px-1 prose-code:rounded prose-pre:bg-slate-900 prose-pre:border prose-pre:border-slate-800">
+                                                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                                        {aiCopy}
+                                                                    </ReactMarkdown>
+                                                                </div>
+                                                            </div>
+                                                        </TabsContent>
+
+                                                        <TabsContent value="raw" className="mt-2">
+                                                            <Textarea
+                                                                value={aiCopy}
+                                                                readOnly
+                                                                className="min-h-[300px] max-h-[500px] bg-slate-950 border-slate-800 text-slate-200 font-mono text-sm"
+                                                            />
+                                                        </TabsContent>
+                                                    </Tabs>
+
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="w-full border-slate-800 text-slate-300 hover:bg-slate-800"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(aiCopy);
+                                                        }}
+                                                    >
+                                                        <Copy className="mr-2 h-4 w-4" /> クリップボードにコピー
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </TabsContent>
+
+                                        <TabsContent value="image" className="mt-4 space-y-4">
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <Label className="text-slate-300 text-sm mb-2 block">生成モード</Label>
+                                                    <select
+                                                        className="w-full bg-slate-950 border border-slate-800 rounded-md p-2 text-slate-200 text-sm"
+                                                        value={imageMode}
+                                                        onChange={(e) => setImageMode(e.target.value)}
+                                                    >
+                                                        <option value="sns_banner">SNSバナー</option>
+                                                        <option value="youtube_thumbnail">YouTubeサムネイル</option>
+                                                        <option value="document">物件紹介資料</option>
+                                                        <option value="stories">ストーリーズ</option>
+                                                        <option value="renovation">リノベーションパース</option>
+                                                        <option value="comparison">比較画像</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <Label className="text-slate-300 text-sm mb-2 block">画風</Label>
+                                                    <select
+                                                        className="w-full bg-slate-950 border border-slate-800 rounded-md p-2 text-slate-200 text-sm"
+                                                        value={imageStyle}
+                                                        onChange={(e) => setImageStyle(e.target.value)}
+                                                    >
+                                                        <option value="modern">モダン</option>
+                                                        <option value="luxury">高級感</option>
+                                                        <option value="minimal">ミニマル</option>
+                                                        <option value="classic">クラシック</option>
+                                                        <option value="handdrawn">手書き風</option>
+                                                        <option value="3d">3D</option>
+                                                        <option value="watercolor">水彩画</option>
+                                                        <option value="neon">ネオン</option>
+                                                        <option value="vintage">ヴィンテージ</option>
+                                                        <option value="futuristic">未来的</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <Label className="text-slate-300 text-sm mb-2 block">サイズ</Label>
+                                                        <select
+                                                            className="w-full bg-slate-950 border border-slate-800 rounded-md p-2 text-slate-200 text-sm"
+                                                            value={imageSize}
+                                                            onChange={(e) => setImageSize(e.target.value)}
+                                                        >
+                                                            <option value="1K">1K</option>
+                                                            <option value="2K">2K</option>
+                                                            <option value="4K">4K</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <Label className="text-slate-300 text-sm mb-2 block">比率</Label>
+                                                        <select
+                                                            className="w-full bg-slate-950 border border-slate-800 rounded-md p-2 text-slate-200 text-sm"
+                                                            value={imageAspectRatio}
+                                                            onChange={(e) => setImageAspectRatio(e.target.value)}
+                                                        >
+                                                            <option value="1:1">1:1</option>
+                                                            <option value="16:9">16:9</option>
+                                                            <option value="9:16">9:16</option>
+                                                            <option value="4:3">4:3</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Property Images Selection */}
+                                            {images.length > 0 && (
+                                                <div>
+                                                    <Label className="text-slate-300 text-sm mb-2 block">
+                                                        物件画像を選択 ({selectedPropertyImages.length}枚選択中)
+                                                    </Label>
+                                                    <div className="grid grid-cols-3 gap-2 max-h-[200px] overflow-y-auto p-2 bg-slate-950 border border-slate-800 rounded-md">
+                                                        {images.map((img: string, idx: number) => (
+                                                            <div
+                                                                key={idx}
+                                                                className={`relative cursor-pointer rounded overflow-hidden border-2 transition-all ${selectedPropertyImages.includes(img)
+                                                                    ? 'border-emerald-500 ring-2 ring-emerald-500'
+                                                                    : 'border-slate-700 hover:border-slate-600'
+                                                                    }`}
+                                                                onClick={() => togglePropertyImage(img)}
+                                                            >
+                                                                <img src={img} alt={`Property ${idx + 1}`} className="w-full h-20 object-cover" />
+                                                                {selectedPropertyImages.includes(img) && (
+                                                                    <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
+                                                                        <div className="bg-emerald-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                                                                            ✓
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 mt-1">
+                                                        クリックして選択（複数選択可）
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {/* Staff Photo Upload */}
+                                            <div>
+                                                <Label className="text-slate-300 text-sm mb-2 block">
+                                                    スタッフ写真（オプション）
+                                                </Label>
+                                                <div className="space-y-2">
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handleStaffPhotoUpload}
+                                                        className="hidden"
+                                                        id="staff-photo-upload"
+                                                    />
+                                                    <label
+                                                        htmlFor="staff-photo-upload"
+                                                        className="block w-full p-3 border-2 border-dashed border-slate-700 rounded-md text-center cursor-pointer hover:border-emerald-600 transition-colors"
+                                                    >
+                                                        {staffPhoto ? (
+                                                            <div className="space-y-2">
+                                                                <img src={staffPhoto} alt="Staff" className="w-20 h-20 object-cover rounded-full mx-auto" />
+                                                                <p className="text-xs text-emerald-400">クリックして変更</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-slate-400">
+                                                                <ImageIcon className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                                                                <p className="text-sm">スタッフ写真をアップロード</p>
+                                                                <p className="text-xs mt-1">吹き出し付きで表示されます</p>
+                                                            </div>
+                                                        )}
+                                                    </label>
+                                                    {staffPhoto && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="w-full border-slate-700 text-slate-400"
+                                                            onClick={() => {
+                                                                setStaffPhoto(null);
+                                                                setStaffPhotoFile(null);
+                                                            }}
+                                                    </div>
+                                            </div>
+
+                                            <Button
+                                                onClick={handleGenerateImage}
+                                                disabled={generatingImage}
+                                                className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white border-0"
+                                            >
+                                                {generatingImage ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 生成中...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <ImageIcon className="mr-2 h-4 w-4" /> 画像を生成
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+
+                                        {generatedImage ? (
+                                            <div className="border border-slate-700 rounded-lg overflow-hidden">
+                                                <img src={generatedImage} alt="Generated" className="w-full" />
+                                                {imageGallery.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        <div className="flex items-center justify-between">
+                                                            <h3 className="text-sm font-semibold text-white">生成履歴 ({imageGallery.length})</h3>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 gap-3 max-h-[600px] overflow-y-auto">
+                                                            {imageGallery.map((item, idx) => (
+                                                                <div key={idx} className="border border-slate-700 rounded-lg overflow-hidden hover:border-emerald-600 transition-colors">
+                                                                    <img
+                                                                        src={item.url}
+                                                                        alt={`${item.mode} - ${item.style}`}
+                                                                        className="w-full cursor-pointer"
+                                                                        onClick={() => setGeneratedImage(item.url)}
+                                                                    />
+                                                                    <div className="p-3 bg-slate-900 space-y-2">
+                                                                        <div className="flex items-center justify-between text-xs">
+                                                                            <span className="text-slate-400">
+                                                                                {item.mode.replace('_', ' ')} • {item.style}
+                                                                            </span>
+                                                                            <span className="text-slate-500">
+                                                                                {new Date(item.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex gap-2">
+                                                                            <Button
+                                                                                size="sm"
+                                                                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                                                onClick={() => {
+                                                                                    const link = document.createElement('a');
+                                                                                    link.href = item.url;
+                                                                                    link.download = `property-${item.mode}-${item.timestamp}.png`;
+                                                                                    link.click();
+                                                                                }}
+                                                                            >
+                                                                                <Copy className="mr-2 h-3 w-3" /> ダウンロード
+                                                                            </Button>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                                                                                onClick={() => window.open(item.url, '_blank')}
+                                                                            >
+                                                                                <ExternalLink className="h-3 w-3" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-4 border border-dashed border-slate-700 rounded-lg text-center text-slate-400">
+                                                        <ImageIcon className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                                                        <p className="text-sm">生成された画像がここに表示されます</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                </div>
+                                )}
+                            </div>
+                        </TabsContent>
+                    </Tabs>
+                        )}
+                </CardContent>
+            </Card>
+        </div>
+        </div >
+    </div >
+</div >
+    );
+}
