@@ -70,7 +70,8 @@ test_*.py
 output/
 data/
 FileMaker/
-*.db
+# *.db
+output/*.db
 *.db-journal
 backups/
 
