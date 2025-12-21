@@ -43,26 +43,24 @@ class Database:
     
     def _init_supabase(self):
         """Initialize Supabase client"""
-        from supabase import create_client
+        from supabase import create_client, Client
         
         url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_ANON_KEY")
+        key = os.getenv("SUPABASE_ANON_KEY")  # Usually acceptable for client ops, but strict RLS might need service role
         
         if not url or not key:
             raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in .env")
         
-        self.supabase = create_client(url, key)
+        self.supabase: Client = create_client(url, key)
     
     def _run_sqlite_migration(self):
         """Run SQLite migration script"""
         migration_file = "sqlite_migration.sql"
         
-        # マイグレーションファイルが存在するか確認
         if os.path.exists(migration_file):
             with open(migration_file, "r", encoding="utf-8") as f:
                 sql_script = f.read()
         else:
-            # ファイルが見つからない場合は、インラインでテーブルを作成
             sql_script = """
             CREATE TABLE IF NOT EXISTS properties (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +129,6 @@ class Database:
         cursor = conn.cursor()
         
         try:
-            # Convert arrays and objects to JSON strings
             images_json = json.dumps(data.get("images", []))
             property_data_json = json.dumps(data.get("property_data", {}))
             
@@ -174,10 +171,58 @@ class Database:
     def _upsert_property_supabase(self, data: Dict[str, Any]) -> bool:
         """Supabase implementation of upsert_property"""
         try:
-            self.supabase.table("properties").upsert(data, on_conflict="url").execute()
+            # Ensure complex types are appropriate (lists/dicts are auto-handled by client if column type is JSON)
+            # Add default active/date fields if missing to match SQLite logic
+            payload = data.copy()
+            if "is_active" not in payload:
+                payload["is_active"] = True
+            if "first_seen_date" not in payload:
+                # IMPORTANT: In upsert, we don't want to overwrite first_seen_date if it exists.
+                # However, Supabase upsert will overwrite unless we handle it carefully.
+                # Standard 'upsert' overwrites everything.
+                # To preserve first_seen_date, we might check existence first or use ON CONFLICT DO NOTHING for that column?
+                # Supabase API doesn't support granular column exclusion in standard upsert easily.
+                # Strategy: We assume 'data' contains first_seen_date if it's new, 
+                # or we trust the caller. If caller passes first_seen_date for existing item, it gets updated.
+                # Actually, in SQLite logic:
+                # INSERT ... VALUES (..., date('now'), ...) 
+                # DO UPDATE SET ... (no first_seen_date in SET clause)
+                # So SQLite preserves first_seen_date.
+                # Supabase: We can't do partial updates on conflict easily in one call without rpc.
+                # Workaround: Check existence? Or just tolerate overwriting for now (less ideal).
+                # BETTER: Try to fetch first.
+                pass 
+                
+            # If preserving first_seen_date is critical, we need to read first.
+            # But that doubles API calls. For now, let's just insert.
+            # If we want to emulate SQLite 'first_seen_date = date.today()' only on insert:
+            
+            # Simple approach: Just upsert.
+            # However, we must ensure `last_seen_date` IS updated.
+            payload['last_seen_date'] = date.today().isoformat()
+            
+            # For first_seen_date: if it's not in the input `data` dict, we adding it might overwrite 'null'?
+            # If row exists, we want to KEEP existing first_seen_date.
+            # Supabase behavior: If we send {url:..., first_seen_date: 'today'}, it updates to today.
+            # To avoid this, we should NOT include first_seen_date in the payload if checking existence is expensive.
+            # BUT: If it's a NEW record, we MUST include it.
+            # Compromise: We try to Select first.
+            
+            existing = self.supabase.table("properties").select("first_seen_date").eq("url", data["url"]).execute()
+            
+            if existing.data and len(existing.data) > 0:
+                # Existing record: Don't change first_seen_date
+                if "first_seen_date" in payload:
+                    del payload["first_seen_date"] # Keep existing
+            else:
+                # New record: Set first_seen_date
+                if "first_seen_date" not in payload:
+                    payload["first_seen_date"] = date.today().isoformat()
+            
+            self.supabase.table("properties").upsert(payload, on_conflict="url").execute()
             return True
         except Exception as e:
-            print(f"Error upserting property: {e}")
+            print(f"Error upserting property to Supabase: {e}")
             return False
     
     # ================================================================
@@ -227,10 +272,12 @@ class Database:
                 "urls": urls,
                 "url_count": len(urls)
             }
+            # urls needs to be a JSON array if the column is JSON/JSONB.
+            # supabase-py should handle list -> json automatically.
             self.supabase.table("daily_link_snapshots").upsert(data, on_conflict="snapshot_date,category").execute()
             return True
         except Exception as e:
-            print(f"Error saving link snapshot: {e}")
+            print(f"Error saving link snapshot to Supabase: {e}")
             return False
     
     def get_previous_links(self, category: str, days_back: int = 1) -> List[str]:
@@ -241,14 +288,12 @@ class Database:
             return self._get_previous_links_supabase(category, days_back)
     
     def _get_previous_links_sqlite(self, category: str, days_back: int) -> List[str]:
-        """SQLite implementation - gets most recent snapshot before today"""
+        """SQLite implementation"""
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
         
         try:
             today = date.today().isoformat()
-            
-            # Get the most recent snapshot before today
             cursor.execute("""
                 SELECT urls, snapshot_date FROM daily_link_snapshots
                 WHERE category = ? AND snapshot_date < ?
@@ -267,9 +312,10 @@ class Database:
             conn.close()
     
     def _get_previous_links_supabase(self, category: str, days_back: int) -> List[str]:
-        """Supabase implementation - gets most recent snapshot before today"""
+        """Supabase implementation"""
         today = date.today().isoformat()
         
+        # Order by snapshot_date DESC, limit 1, filter date < today
         result = self.supabase.table("daily_link_snapshots")\
             .select("urls, snapshot_date")\
             .eq("category", category)\
@@ -280,7 +326,7 @@ class Database:
         
         if result.data:
             print(f"[{category}] Using snapshot from {result.data[0]['snapshot_date']} for diff detection")
-            return result.data[0]["urls"]
+            return result.data[0]["urls"] # supabase-py converts JSON to list auto
         
         print(f"[{category}] No previous snapshot found - treating all as new")
         return []
@@ -300,10 +346,8 @@ class Database:
         """SQLite implementation"""
         if not urls:
             return 0
-        
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
-        
         try:
             placeholders = ','.join('?' * len(urls))
             cursor.execute(f"""
@@ -311,7 +355,6 @@ class Database:
                 SET is_active = 0, last_seen_date = date('now')
                 WHERE url IN ({placeholders})
             """, urls)
-            
             affected = cursor.rowcount
             conn.commit()
             return affected
@@ -322,11 +365,8 @@ class Database:
         """Supabase implementation"""
         if not urls:
             return 0
-        
-        # Supabaseの制限を避けるため、100件ずつバッチ処理
         BATCH_SIZE = 100
         total_marked = 0
-        
         for i in range(0, len(urls), BATCH_SIZE):
             batch_urls = urls[i:i + BATCH_SIZE]
             try:
@@ -338,9 +378,7 @@ class Database:
                 total_marked += batch_count
             except Exception as e:
                 print(f"Error marking properties inactive (batch {i//BATCH_SIZE + 1}): {e}")
-                # エラーが発生しても次のバッチを続行
                 continue
-        
         return total_marked
     
     # ================================================================
@@ -348,23 +386,18 @@ class Database:
     # ================================================================
     
     def get_all_active_properties(self) -> List[Dict]:
-        """Get all active properties"""
         if self.db_type == "sqlite":
             return self._get_all_active_properties_sqlite()
         else:
             return self._get_all_active_properties_supabase()
     
     def _get_all_active_properties_sqlite(self) -> List[Dict]:
-        """SQLite implementation"""
         conn = self._get_sqlite_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
         try:
             cursor.execute("SELECT * FROM properties WHERE is_active = 1")
             rows = cursor.fetchall()
-            
-            # Convert to list of dicts and parse JSON fields
             results = []
             for row in rows:
                 data = dict(row)
@@ -372,115 +405,146 @@ class Database:
                 data["property_data"] = json.loads(data["property_data"]) if data["property_data"] else {}
                 data["is_active"] = bool(data["is_active"])
                 results.append(data)
-            
             return results
         finally:
             conn.close()
     
     def _get_all_active_properties_supabase(self) -> List[Dict]:
-        """Supabase implementation"""
-        result = self.supabase.table("properties")\
-            .select("*")\
-            .eq("is_active", True)\
-            .execute()
-        return result.data if result.data else []
-    
+        # Might need pagination if count is large
+        all_data = []
+        page_size = 1000
+        from_idx = 0
+        while True:
+            result = self.supabase.table("properties")\
+                .select("*")\
+                .eq("is_active", True)\
+                .range(from_idx, from_idx + page_size - 1)\
+                .execute()
+            if not result.data:
+                break
+            all_data.extend(result.data)
+            if len(result.data) < page_size:
+                break
+            from_idx += page_size
+        return all_data
+
     # ================================================================
     # STATISTICS METHODS
     # ================================================================
-    
+
     def get_price_statistics(self) -> Dict[str, Any]:
-        """Get comprehensive price statistics"""
         if self.db_type == "sqlite":
             return self._get_price_statistics_sqlite()
         else:
             return self._get_price_statistics_supabase()
-    
+
     def _get_price_statistics_sqlite(self) -> Dict[str, Any]:
-        """SQLite price statistics"""
+        # (Same as your original code for SQLite)
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
-        
         try:
-            # Extract prices from property_data
             cursor.execute("""
                 SELECT property_data FROM properties 
                 WHERE is_active = 1 AND property_data IS NOT NULL AND property_data != '{}'
             """)
-            
-            prices = []
-            for row in cursor.fetchall():
-                try:
-                    data = json.loads(row[0])
-                    # Try multiple fields where price might be
-                    price_str = data.get("価格") or data.get("家賃") or data.get("price")
-                    
-                    if price_str:
-                        # Extract numbers from Japanese price format
-                        # Examples: "4,980万円", "8.5万円", "1億4,800万円"
-                        import re
-                        
-                        # Remove commas
-                        price_str = price_str.replace(',', '')
-                        
-                        # Handle 億 (hundred million)
-                        if '億' in price_str:
-                            match = re.search(r'(\d+)億(\d+)万', price_str)
-                            if match:
-                                oku = int(match.group(1))
-                                man = int(match.group(2))
-                                prices.append(oku * 10000 + man)
-                            else:
-                                match = re.search(r'(\d+)億', price_str)
-                                if match:
-                                    prices.append(int(match.group(1)) * 10000)
-                        # Handle 万円 (ten thousand yen)
-                        elif '万' in price_str:
-                            match = re.search(r'([0-9.]+)万', price_str)
-                            if match:
-                                prices.append(float(match.group(1)))
-                        # Handle plain numbers
-                        else:
-                            match = re.search(r'([0-9.]+)', price_str)
-                            if match:
-                                prices.append(float(match.group(1)))
-                except Exception as e:
-                    continue
-            
-            if not prices:
-                return {"average": 0, "median": 0, "min": 0, "max": 0, "count": 0}
-            
-            prices.sort()
-            count = len(prices)
-            median = prices[count // 2] if count % 2 == 1 else (prices[count // 2 - 1] + prices[count // 2]) / 2
-            
-            return {
-                "average": round(sum(prices) / count, 1),
-                "median": round(median, 1),
-                "min": round(min(prices), 1),
-                "max": round(max(prices), 1),
-                "count": count
-            }
+            prices = self._extract_prices_from_cursor(cursor)
+            return self._calculate_stats(prices)
         finally:
             conn.close()
-    
+
     def _get_price_statistics_supabase(self) -> Dict[str, Any]:
-        """Supabase price statistics"""
-        # Similar implementation for Supabase
-        return {"average": 0, "median": 0, "min": 0, "max": 0, "count": 0}
-    
+        # Supabase implementation
+        # Fetch only necessary column to save bandwidth
+        # Need to iterate because parsing logic is in Python
+        # RPC would be better, but doing client-side for now for compatibility
+        prices = []
+        page_size = 1000
+        from_idx = 0
+        while True:
+            result = self.supabase.table("properties")\
+                .select("property_data")\
+                .eq("is_active", True)\
+                .range(from_idx, from_idx + page_size - 1)\
+                .execute()
+            
+            if not result.data:
+                break
+                
+            for row in result.data:
+                price = self._parse_price_from_dict(row.get("property_data", {}))
+                if price:
+                    prices.append(price)
+            
+            if len(result.data) < page_size:
+                break
+            from_idx += page_size
+            
+        return self._calculate_stats(prices)
+
+    def _parse_price_from_dict(self, data: Dict) -> Optional[float]:
+        try:
+            if not isinstance(data, dict): return None
+            price_str = data.get("価格") or data.get("家賃") or data.get("price")
+            if not price_str: return None
+            
+            import re
+            price_str = str(price_str).replace(',', '')
+            
+            if '億' in price_str:
+                match = re.search(r'(\d+)億(\d+)万', price_str)
+                if match:
+                    return float(match.group(1)) * 10000 + float(match.group(2))
+                match = re.search(r'(\d+)億', price_str)
+                if match:
+                    return float(match.group(1)) * 10000
+            elif '万' in price_str:
+                match = re.search(r'([0-9.]+)万', price_str)
+                if match:
+                    return float(match.group(1))
+            else:
+                match = re.search(r'([0-9.]+)', price_str)
+                if match:
+                    return float(match.group(1))
+        except:
+            return None
+        return None
+
+    def _extract_prices_from_cursor(self, cursor) -> List[float]:
+        prices = []
+        for row in cursor.fetchall():
+            try:
+                data = json.loads(row[0])
+                p = self._parse_price_from_dict(data)
+                if p: prices.append(p)
+            except:
+                continue
+        return prices
+
+    def _calculate_stats(self, prices: List[float]) -> Dict[str, Any]:
+        if not prices:
+            return {"average": 0, "median": 0, "min": 0, "max": 0, "count": 0}
+        
+        prices.sort()
+        count = len(prices)
+        median = prices[count // 2] if count % 2 == 1 else (prices[count // 2 - 1] + prices[count // 2]) / 2
+        
+        return {
+            "average": round(sum(prices) / count, 1),
+            "median": round(median, 1),
+            "min": round(min(prices), 1),
+            "max": round(max(prices), 1),
+            "count": count
+        }
+
     def get_category_statistics(self) -> Dict[str, Dict[str, Any]]:
-        """Get statistics by category"""
         if self.db_type == "sqlite":
             return self._get_category_statistics_sqlite()
         else:
             return self._get_category_statistics_supabase()
-    
+
     def _get_category_statistics_sqlite(self) -> Dict[str, Dict[str, Any]]:
-        """SQLite category statistics"""
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
-        
         try:
             cursor.execute("""
                 SELECT 
@@ -493,7 +557,6 @@ class Database:
                 WHERE is_active = 1
                 GROUP BY category
             """)
-            
             results = {}
             for row in cursor.fetchall():
                 results[row[0]] = {
@@ -503,178 +566,172 @@ class Database:
                     "count": row[3],
                     "new_today": row[4]
                 }
-            
             return results
         finally:
             conn.close()
-    
+
     def _get_category_statistics_supabase(self) -> Dict[str, Dict[str, Any]]:
-        """Supabase category statistics"""
-        # Supabase implementation
-        return {}
-    
+        # This requires aggregation which Supabase JS/Py client doesn't do natively easily without RPC
+        # Basic approach: Fetch all 'category, genre_name_ja, category_type, first_seen_date' columns for active=true
+        # Then aggregate in Python.
+        
+        all_rows = []
+        page_size = 1000
+        from_idx = 0
+        today_str = date.today().isoformat()
+        
+        while True:
+            result = self.supabase.table("properties")\
+                .select("category, genre_name_ja, category_type, first_seen_date")\
+                .eq("is_active", True)\
+                .range(from_idx, from_idx + page_size - 1)\
+                .execute()
+            
+            if not result.data:
+                break
+            all_rows.extend(result.data)
+            if len(result.data) < page_size:
+                break
+            from_idx += page_size
+            
+        results = {}
+        for row in all_rows:
+            cat = row.get("category")
+            if not cat: continue
+            
+            if cat not in results:
+                results[cat] = {
+                    "category": cat,
+                    "genre_name_ja": row.get("genre_name_ja"),
+                    "category_type": row.get("category_type"),
+                    "count": 0,
+                    "new_today": 0
+                }
+            
+            results[cat]["count"] += 1
+            if row.get("first_seen_date") and str(row.get("first_seen_date")).startswith(today_str):
+                results[cat]["new_today"] += 1
+                
+        return results
+
     def get_area_distribution(self) -> Dict[str, int]:
-        """Get property distribution by area (city)"""
         if self.db_type == "sqlite":
             return self._get_area_distribution_sqlite()
         else:
             return self._get_area_distribution_supabase()
-    
+            
     def _get_area_distribution_sqlite(self) -> Dict[str, int]:
-        """SQLite area distribution"""
+        # (Existing SQLite logic)
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
-        
         try:
-            cursor.execute("""
-                SELECT property_data FROM properties WHERE is_active = 1
-            """)
-            
+            cursor.execute("SELECT property_data FROM properties WHERE is_active = 1")
             area_counts = {}
             for row in cursor.fetchall():
                 if row[0]:
                     try:
                         data = json.loads(row[0])
-                        location = data.get("所在地", "")
-                        if location:
-                            # Extract city name (e.g., "那覇市" from "那覇市久茂地")
-                            import re
-                            match = re.search(r'([^市]+市|[^町]+町|[^村]+村)', location)
-                            if match:
-                                city = match.group(1)
-                                area_counts[city] = area_counts.get(city, 0) + 1
-                    except:
-                        pass
-            
-            # Sort by count and return top 10
-            sorted_areas = sorted(area_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-            return dict(sorted_areas)
+                        self._count_area(data, area_counts)
+                    except: pass
+            return dict(sorted(area_counts.items(), key=lambda x: x[1], reverse=True)[:10])
         finally:
             conn.close()
-    
+
     def _get_area_distribution_supabase(self) -> Dict[str, int]:
-        """Supabase area distribution"""
-        import re
-        
+        # Supabase logic
         area_counts = {}
         page_size = 1000
         from_idx = 0
-        
-        def extract_city_name(location_str: str) -> str:
-            """所在地文字列から市区町村名を抽出"""
-            if not location_str or location_str == '不明':
-                return '不明'
-            
-            # 「沖縄県」を削除
-            location_str = location_str.replace('沖縄県', '').strip()
-            
-            # 市区町村名を抽出（例: "那覇市"、"北谷町"、"読谷村"）
-            match = re.search(r'([^市]+市|[^町]+町|[^村]+村)', location_str)
-            if match:
-                return match.group(1)
-            
-            # 市区町村名が見つからない場合は、最初の部分を返す
-            parts = location_str.split()
-            if parts:
-                return parts[0]
-            
-            return '不明'
-        
         while True:
             result = self.supabase.table("properties")\
                 .select("property_data")\
                 .eq("is_active", True)\
                 .range(from_idx, from_idx + page_size - 1)\
                 .execute()
-            
-            if not result.data or len(result.data) == 0:
-                break
-            
+            if not result.data: break
             for item in result.data:
-                pd = item.get("property_data", {})
-                if isinstance(pd, dict):
-                    # 「所在地」または「住所」フィールドを探す
-                    location = None
-                    for key in ['所在地', '住所', 'location', 'area', 'city']:
-                        if key in pd and pd[key]:
-                            location = str(pd[key]).strip()
-                            break
-                    
-                    if not location or location == '':
-                        location = '不明'
-                    
-                    # 市区町村名を抽出
-                    city = extract_city_name(location)
-                    area_counts[city] = area_counts.get(city, 0) + 1
-            
-            if len(result.data) < page_size:
-                break
-            
+                self._count_area(item.get("property_data", {}), area_counts)
+            if len(result.data) < page_size: break
             from_idx += page_size
-        
-        # 件数でソートして上位10件を返す
-        sorted_areas = sorted(area_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        return dict(sorted_areas)
-    
+        return dict(sorted(area_counts.items(), key=lambda x: x[1], reverse=True)[:10])
+
+    def _count_area(self, data: Dict, counts: Dict[str, int]):
+        if not isinstance(data, dict): return
+        location = data.get("所在地") or data.get("住所") or data.get("location") or data.get("area")
+        if not location: return
+        import re
+        location = str(location).replace('沖縄県', '').strip()
+        match = re.search(r'([^市]+市|[^町]+町|[^村]+村)', location)
+        city = match.group(1) if match else location.split()[0]
+        if city:
+            counts[city] = counts.get(city, 0) + 1
+
     def get_time_based_statistics(self) -> Dict[str, Any]:
-        """Get time-based statistics (today, this week, this month)"""
         if self.db_type == "sqlite":
             return self._get_time_based_statistics_sqlite()
         else:
             return self._get_time_based_statistics_supabase()
-    
+            
     def _get_time_based_statistics_sqlite(self) -> Dict[str, Any]:
-        """SQLite time-based statistics"""
+        # (Existing Code)
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
-        
         try:
-            # New properties
             cursor.execute("""
                 SELECT 
                     COUNT(CASE WHEN first_seen_date = date('now') THEN 1 END) as new_today,
                     COUNT(CASE WHEN first_seen_date >= date('now', '-7 days') THEN 1 END) as new_week,
                     COUNT(CASE WHEN first_seen_date >= date('now', '-30 days') THEN 1 END) as new_month
-                FROM properties
-                WHERE is_active = 1
+                FROM properties WHERE is_active = 1
             """)
-            
             row = cursor.fetchone()
-            
-            # Sold properties (inactive)
             cursor.execute("""
                 SELECT 
                     COUNT(CASE WHEN last_seen_date = date('now') THEN 1 END) as sold_today,
                     COUNT(CASE WHEN last_seen_date >= date('now', '-7 days') THEN 1 END) as sold_week,
                     COUNT(CASE WHEN last_seen_date >= date('now', '-30 days') THEN 1 END) as sold_month
-                FROM properties
-                WHERE is_active = 0
+                FROM properties WHERE is_active = 0
             """)
-            
             sold_row = cursor.fetchone()
-            
             return {
-                "new_today": row[0],
-                "new_week": row[1],
-                "new_month": row[2],
-                "sold_today": sold_row[0],
-                "sold_week": sold_row[1],
-                "sold_month": sold_row[2]
+                "new_today": row[0], "new_week": row[1], "new_month": row[2],
+                "sold_today": sold_row[0], "sold_week": sold_row[1], "sold_month": sold_row[2]
             }
         finally:
             conn.close()
-    
+
     def _get_time_based_statistics_supabase(self) -> Dict[str, Any]:
-        """Supabase time-based statistics"""
+        # Supabase Implementation
+        today = date.today()
+        import datetime
+        week_ago = (today - datetime.timedelta(days=7)).isoformat()
+        month_ago = (today - datetime.timedelta(days=30)).isoformat()
+        today_str = today.isoformat()
+        
+        # Helper to count
+        def get_count(table, filters):
+            q = self.supabase.table(table).select("*", count="exact", head=True)
+            for k, v in filters.items():
+                # Handling simple filters. Complex ones might need string parsing
+                if k.endswith("__gte"):
+                    q = q.gte(k.replace("__gte", ""), v)
+                elif k == "is_active":
+                    q = q.eq(k, v)
+                elif k == "first_seen_date":
+                    q = q.eq(k, v)
+                elif k == "last_seen_date":
+                    q = q.eq(k, v)
+            r = q.execute()
+            return r.count if r.count else 0
+        
         return {
-            "new_today": 0,
-            "new_week": 0,
-            "new_month": 0,
-            "sold_today": 0,
-            "sold_week": 0,
-            "sold_month": 0
+            "new_today": get_count("properties", {"is_active": True, "first_seen_date": today_str}),
+            "new_week": get_count("properties", {"is_active": True, "first_seen_date__gte": week_ago}),
+            "new_month": get_count("properties", {"is_active": True, "first_seen_date__gte": month_ago}),
+            
+            "sold_today": get_count("properties", {"is_active": False, "last_seen_date": today_str}),
+            "sold_week": get_count("properties", {"is_active": False, "last_seen_date__gte": week_ago}),
+            "sold_month": get_count("properties", {"is_active": False, "last_seen_date__gte": month_ago})
         }
 
-
-# Create global database instance
 db = Database()
