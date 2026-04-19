@@ -2,7 +2,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Building2, Calendar, Settings, LogOut, Map, Shield, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Building2, Calendar, Settings, LogOut, Map, Shield, BarChart3, CircleDollarSign, Sparkles, FileText, MapPinned } from "lucide-react";
 import { signOut } from "next-auth/react";
 
 export function Sidebar() {
@@ -53,6 +53,52 @@ export function Sidebar() {
                                 差分分析
                             </Button>
                         </Link>
+
+                        <div className="pt-4 pb-2 px-4">
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 h-px bg-slate-700" />
+                                <span className="text-xs font-medium text-slate-500 whitespace-nowrap">営業ツール</span>
+                                <div className="flex-1 h-px bg-slate-700" />
+                            </div>
+                        </div>
+
+                        <Link href="/sales/market-price">
+                            <Button
+                                variant="ghost"
+                                className={`w-full justify-start ${pathname === "/sales/market-price" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "text-slate-200"}`}
+                            >
+                                <CircleDollarSign className="mr-2 h-4 w-4" />
+                                相場価格
+                            </Button>
+                        </Link>
+                        <Link href="/sales/featured">
+                            <Button
+                                variant="ghost"
+                                className={`w-full justify-start ${pathname === "/sales/featured" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "text-slate-200"}`}
+                            >
+                                <Sparkles className="mr-2 h-4 w-4" />
+                                特集
+                            </Button>
+                        </Link>
+                        <Link href="/sales/proposal">
+                            <Button
+                                variant="ghost"
+                                className={`w-full justify-start ${pathname === "/sales/proposal" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "text-slate-200"}`}
+                            >
+                                <FileText className="mr-2 h-4 w-4" />
+                                物件提案
+                            </Button>
+                        </Link>
+                        <Link href="/sales/area-analysis">
+                            <Button
+                                variant="ghost"
+                                className={`w-full justify-start ${pathname === "/sales/area-analysis" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "text-slate-200"}`}
+                            >
+                                <MapPinned className="mr-2 h-4 w-4" />
+                                エリア分析
+                            </Button>
+                        </Link>
+
                         <Link href="/admin">
                             <Button
                                 variant="ghost"

@@ -7,10 +7,16 @@ export async function middleware(req: NextRequest) {
     const isAuth = !!token;
     const isAuthPage = req.nextUrl.pathname.startsWith("/login");
 
+    const isPublicPage = req.nextUrl.pathname.startsWith("/sales/featured");
+
     if (isAuthPage) {
         if (isAuth) {
             return NextResponse.redirect(new URL("/", req.url));
         }
+        return null;
+    }
+
+    if (isPublicPage) {
         return null;
     }
 

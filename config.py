@@ -23,7 +23,7 @@ class Config:
     # =====================================================
     # スクレイピング設定
     # =====================================================
-    MAX_WORKERS: int = int(os.getenv("SCRAPER_MAX_WORKERS", "4"))  # Increased to 4 for faster scraping
+    MAX_WORKERS: int = int(os.getenv("SCRAPER_MAX_WORKERS", "2"))  # 2 workers: single browser, prevents Chromium leak
     ITEMS_PER_PAGE: int = int(os.getenv("SCRAPER_ITEMS_PER_PAGE", "50"))
     MAX_PAGES_PER_CATEGORY: int = int(os.getenv("SCRAPER_MAX_PAGES", "150"))  # Increased to handle large categories
     HEADLESS_MODE: bool = os.getenv("SCRAPER_HEADLESS", "true").lower() == "true"

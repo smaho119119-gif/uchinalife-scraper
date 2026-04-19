@@ -12,6 +12,7 @@ from fake_useragent import UserAgent
 from typing import List, Dict, Set, Tuple, Optional, Any, Callable
 from database import db  # Database abstraction layer
 from config import config  # 設定ファイルをインポート
+from image_archiver import archive_sold_property_images, ensure_bucket_exists
 
 # --- 設定読み込み ---
 BASE_URL: str = config.BASE_URL
@@ -72,6 +73,15 @@ def get_random_timezone() -> str:
     ]
     return random.choice(timezones)
 
+def _safe_int(val, default=0) -> int:
+    """Safely convert to int, returning default on failure"""
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        import re as _re
+        match = _re.search(r'\d+', str(val))
+        return int(match.group()) if match else default
+
 def retry_with_backoff(func: Callable, max_retries: int = MAX_RETRIES, base_delay: int = BASE_RETRY_DELAY) -> Any:
     """Retry function with exponential backoff"""
     for attempt in range(max_retries):
@@ -85,72 +95,70 @@ def retry_with_backoff(func: Callable, max_retries: int = MAX_RETRIES, base_dela
             time.sleep(delay)
     return None
 
-# Thread-local storage for Playwright instances
+# Thread-local Playwright — each thread owns its own browser (Playwright requires this)
 import threading
+import signal
+import atexit
 from collections import deque
 
+# Global rate limiting
+_request_times = deque(maxlen=100)
+_request_lock = threading.Lock()
+
+# Track all thread browsers for cleanup
+_all_thread_browsers = []
+_browsers_lock = threading.Lock()
+
+# Thread-local storage
 _thread_local = threading.local()
 
-# Global rate limiting
-_request_times = deque(maxlen=100)  # Track recent request times
-_request_lock = threading.Lock()
-_consecutive_errors = 0
-_error_lock = threading.Lock()
+def _cleanup_all_browsers():
+    """Kill all browsers on exit — prevents zombie Chromium processes"""
+    with _browsers_lock:
+        for entry in _all_thread_browsers:
+            try:
+                entry["browser"].close()
+            except:
+                pass
+            try:
+                entry["playwright"].stop()
+            except:
+                pass
+        _all_thread_browsers.clear()
+    # Force kill any leftover Chromium
+    try:
+        import subprocess
+        subprocess.run(["pkill", "-f", "chromium.*--headless"], capture_output=True, timeout=5)
+    except:
+        pass
+
+atexit.register(_cleanup_all_browsers)
+
+def _signal_handler(signum, frame):
+    """Handle SIGTERM/SIGINT to cleanup browser"""
+    print(f"\nReceived signal {signum}, cleaning up...", flush=True)
+    _cleanup_all_browsers()
+    sys.exit(1)
+
+signal.signal(signal.SIGTERM, _signal_handler)
+signal.signal(signal.SIGINT, _signal_handler)
 
 def rate_limit_wait():
-    """Smart rate limiting with burst control"""
+    """Simple rate limiting — releases lock before sleeping"""
+    sleep_time = 0
     with _request_lock:
         now = time.time()
-        
-        # Remove old entries (older than 1 second)
         while _request_times and now - _request_times[0] > 1.0:
             _request_times.popleft()
-        
-        # Check if we're over the rate limit
         if len(_request_times) >= MAX_REQUESTS_PER_SECOND:
             sleep_time = 1.0 - (now - _request_times[0])
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-        
-        # Burst control: check recent burst window
-        recent_requests = sum(1 for t in _request_times if now - t < BURST_WINDOW)
-        if recent_requests >= BURST_SIZE:
-            time.sleep(random.uniform(0.5, 1.0))
-        
         _request_times.append(time.time())
-
-def check_for_blocking(page_content, url=""):
-    """Detect if we're being blocked"""
-    global _consecutive_errors
-    
-    blocking_indicators = [
-        "access denied",
-        "blocked",
-        "captcha",
-        "too many requests",
-        "rate limit",
-        "403 forbidden",
-        "429"
-    ]
-    
-    content_lower = page_content.lower() if page_content else ""
-    is_blocked = any(indicator in content_lower for indicator in blocking_indicators)
-    
-    with _error_lock:
-        if is_blocked:
-            _consecutive_errors += 1
-            if _consecutive_errors >= 3:
-                print(f"⚠️  Blocking detected! Slowing down... (errors: {_consecutive_errors})")
-                time.sleep(random.uniform(5, 10))
-            return True
-        else:
-            _consecutive_errors = max(0, _consecutive_errors - 1)
-    
-    return False
+    if sleep_time > 0:
+        time.sleep(sleep_time)
 
 def get_thread_browser() -> Browser:
-    """Get or create a browser instance for the current thread"""
-    if not hasattr(_thread_local, 'playwright'):
+    """Get or create a Playwright+browser for the current thread"""
+    if not hasattr(_thread_local, 'playwright') or _thread_local.playwright is None:
         _thread_local.playwright = sync_playwright().start()
         _thread_local.browser = _thread_local.playwright.chromium.launch(
             headless=True,
@@ -158,13 +166,26 @@ def get_thread_browser() -> Browser:
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
                 '--no-sandbox',
+                '--disable-gpu',
             ]
         )
         _thread_local.uses = 0
-    
+        with _browsers_lock:
+            _all_thread_browsers.append({
+                "browser": _thread_local.browser,
+                "playwright": _thread_local.playwright,
+                "thread_id": threading.get_ident(),
+            })
+
     _thread_local.uses += 1
     if _thread_local.uses > MAX_BROWSER_USES:
-        # print(f"Restarting browser for thread {threading.get_ident()} to free memory...")
+        # Close old context and browser, create new
+        try:
+            if hasattr(_thread_local, 'context') and _thread_local.context:
+                _thread_local.context.close()
+                _thread_local.context = None
+        except:
+            pass
         try:
             _thread_local.browser.close()
         except:
@@ -175,26 +196,52 @@ def get_thread_browser() -> Browser:
                 '--disable-blink-features=AutomationControlled',
                 '--disable-dev-shm-usage',
                 '--no-sandbox',
+                '--disable-gpu',
             ]
         )
         _thread_local.uses = 0
-        
+        # Replace old entry instead of appending
+        with _browsers_lock:
+            _all_thread_browsers[:] = [e for e in _all_thread_browsers if e.get("thread_id") != threading.get_ident()]
+            _all_thread_browsers.append({
+                "browser": _thread_local.browser,
+                "playwright": _thread_local.playwright,
+                "thread_id": threading.get_ident(),
+            })
+
     return _thread_local.browser
 
-def cleanup_thread_browser():
-    """Cleanup browser for current thread"""
-    if hasattr(_thread_local, 'browser'):
-        _thread_local.browser.close()
-        _thread_local.playwright.stop()
-        delattr(_thread_local, 'browser')
-        delattr(_thread_local, 'playwright')
+def get_thread_context():
+    """Get or create a browser context for the current thread"""
+    if not hasattr(_thread_local, 'context') or _thread_local.context is None:
+        browser = get_thread_browser()
+        _thread_local.context = create_browser_context(browser)
+
+    return _thread_local.context
+
+def cleanup_thread_context():
+    """Cleanup context and browser for current thread"""
+    if hasattr(_thread_local, 'context') and _thread_local.context:
+        try:
+            _thread_local.context.close()
+        except:
+            pass
+        _thread_local.context = None
+    if hasattr(_thread_local, 'browser') and _thread_local.browser:
+        try:
+            _thread_local.browser.close()
+        except:
+            pass
+        _thread_local.browser = None
+    if hasattr(_thread_local, 'playwright') and _thread_local.playwright:
+        try:
+            _thread_local.playwright.stop()
+        except:
+            pass
+        _thread_local.playwright = None
 
 def create_browser_context(browser: Browser, headless=True):
     """Create a new browser context with anti-blocking measures"""
-    
-    # Random delay to avoid detection
-    time.sleep(random.uniform(0.1, 0.5))
-    
     # Get random configurations
     user_agent = get_random_user_agent()
     referer = get_random_referer()
@@ -581,8 +628,8 @@ def collect_links(category_name, base_url, browser: Browser):
                         page_numbers = []
                         for selector in pagination_selectors:
                             try:
-                                links = page.query_selector_all(selector)
-                                for link in links:
+                                nav_links = page.query_selector_all(selector)
+                                for link in nav_links:
                                     text = link.inner_text().strip()
                                     if text.isdigit():
                                         page_numbers.append(int(text))
@@ -673,20 +720,16 @@ def collect_links(category_name, base_url, browser: Browser):
 
 # --- Phase 2: Scrape Details ---
 def scrape_detail(url, category):
-    # Rate limiting to prevent blocking
     rate_limit_wait()
-    
-    # Random delay to avoid detection (reduced for performance)
-    time.sleep(random.uniform(0.3, 1.2))
-    
-    # Get thread-local browser
-    browser = get_thread_browser()
-    context = create_browser_context(browser)
+    time.sleep(random.uniform(0.1, 0.3))
+
+    # Reuse thread-local context, create a fresh page (lightweight)
+    context = get_thread_context()
     page = context.new_page()
     data = {"url": url, "category": category, "scraped_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-    
+
     try:
-        page.goto(url, wait_until='domcontentloaded', timeout=10000)
+        page.goto(url, wait_until='domcontentloaded', timeout=15000)
         
         # Check for blocking (DISABLED - causing false positives)
         # if check_for_blocking(page.content(), url):
@@ -817,10 +860,10 @@ def scrape_detail(url, category):
         data["error"] = str(e)
     finally:
         try:
-            context.close()
+            page.close()
         except:
             pass
-        
+
     return data
 
 # --- Helper Functions for Database Integration ---
@@ -852,7 +895,7 @@ def transform_to_db_format(scraped_data: dict, category: str) -> dict:
         "genre_name_ja": GENRE_NAMES[category],
         "title": scraped_data.get("title"),
         "price": scraped_data.get("price"),
-        "favorites": int(scraped_data.get("favorites", 0)) if scraped_data.get("favorites") else 0,
+        "favorites": _safe_int(scraped_data.get("favorites", 0)),
         "update_date": scraped_data.get("update_date"),
         "expiry_date": scraped_data.get("expiry_date"),
         "images": images_list,
@@ -1073,7 +1116,10 @@ def main():
     print(f"うちなーらいふ不動産スクレイピングツール - Database版")
     print(f"Database Type: {db.db_type.upper()}")
     print(f"{'='*70}\n")
-    
+
+    # Ensure image archive bucket exists
+    ensure_bucket_exists()
+
     # Use separate Playwright instance for link collection
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -1151,8 +1197,21 @@ def main():
                 total_new += len(new_urls)
                 total_sold += len(sold_urls)
                 
-                # Mark sold properties as inactive in database
+                # Archive images of sold properties BEFORE marking inactive
                 if sold_urls:
+                    print(f"  📸 Archiving images for {len(sold_urls)} sold properties...", flush=True)
+                    archived_count = 0
+                    for sold_url in sold_urls:
+                        prop = db.get_property_by_url(sold_url)
+                        if prop and prop.get("images"):
+                            urls_saved = archive_sold_property_images(
+                                sold_url, prop["images"], cat_name
+                            )
+                            if urls_saved:
+                                db.update_archived_images(sold_url, urls_saved)
+                                archived_count += 1
+                    print(f"  ✓ Archived images for {archived_count}/{len(sold_urls)} properties", flush=True)
+
                     marked = db.mark_properties_inactive(sold_urls)
                     print(f"  ✓ Marked {marked} properties as sold", flush=True)
                 
@@ -1239,11 +1298,9 @@ def main():
             print(f"  Scraped: {scraped_count}", flush=True)
             print(f"  Errors: {error_count}", flush=True)
 
-        # Cleanup threads
+        # Cleanup thread contexts (not browsers — single browser is cleaned up via atexit)
         print("\nCleaning up worker threads...")
-        # Submit cleanup tasks to ensure all threads close their browsers
-        # We submit more tasks than workers to ensure all threads pick one up
-        cleanup_futures = [executor.submit(cleanup_thread_browser) for _ in range(MAX_WORKERS * 2)]
+        cleanup_futures = [executor.submit(cleanup_thread_context) for _ in range(MAX_WORKERS * 2)]
         for f in cleanup_futures:
             try:
                 f.result()
@@ -1268,4 +1325,7 @@ def main():
         auto_diagnose_and_fix(total_scraped)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        _cleanup_all_browsers()

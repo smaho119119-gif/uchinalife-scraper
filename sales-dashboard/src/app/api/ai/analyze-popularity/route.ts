@@ -405,7 +405,7 @@ ${popularPoints.length > 0 ? popularPoints.join('\n') : '特記事項なし'}
                     analysis = response.text();
                 }
                 
-                actualModelUsed = fallbackModel.name;
+                actualModelUsed = fallbackModel.name as typeof actualModelUsed;
                 console.log(`Successfully generated with: ${actualModelUsed}`);
                 break; // 成功したらループを抜ける
                 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { supabase, getAllGeneratedImages, imageExistsByFilename } from '@/lib/supabase';
+import { supabase, getGeneratedImages } from '@/lib/supabase';
 
 // テーブル名
 const TABLE_NAME = 'uchina_property_images';
@@ -67,8 +67,8 @@ export async function POST(request: Request) {
             const createdAt = new Date(parseInt(timestamp)).toISOString();
 
             // 既に登録されているかチェック
-            const exists = await imageExistsByFilename(filename);
-            if (exists) {
+            const { data: existsData } = await supabase.from(TABLE_NAME).select('id').eq('filename', filename).limit(1);
+            if (existsData && existsData.length > 0) {
                 skipped++;
                 continue;
             }
@@ -114,7 +114,8 @@ export async function POST(request: Request) {
 // 全ての生成画像を取得（物件URLに関係なく）
 export async function GET() {
     try {
-        const images = await getAllGeneratedImages(100);
+        const { data: images } = await supabase.from(TABLE_NAME).select('*').order('created_at', { ascending: false }).limit(100);
+        if (!images) return NextResponse.json([]);
         
         // ローカルファイルの存在確認も行う
         const publicDir = path.join(process.cwd(), 'public', 'generated-images');

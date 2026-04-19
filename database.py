@@ -335,6 +335,65 @@ class Database:
     # MARK PROPERTIES AS INACTIVE
     # ================================================================
     
+    def get_property_by_url(self, url: str) -> Optional[Dict]:
+        """Get a single property by URL"""
+        if self.db_type == "sqlite":
+            conn = self._get_sqlite_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute("SELECT url, category, images FROM properties WHERE url = ?", (url,))
+                row = cursor.fetchone()
+                if row:
+                    images = row[2]
+                    if isinstance(images, str):
+                        try:
+                            images = json.loads(images)
+                        except:
+                            images = []
+                    return {"url": row[0], "category": row[1], "images": images}
+                return None
+            finally:
+                conn.close()
+        else:
+            try:
+                result = self.supabase.table("properties")\
+                    .select("url, category, images")\
+                    .eq("url", url)\
+                    .limit(1)\
+                    .execute()
+                if result.data:
+                    return result.data[0]
+                return None
+            except Exception as e:
+                print(f"Error getting property by url: {e}")
+                return None
+
+    def update_archived_images(self, url: str, archived_urls: List[str]) -> bool:
+        """Save archived image URLs to the property record"""
+        archived_json = json.dumps(archived_urls)
+        if self.db_type == "sqlite":
+            conn = self._get_sqlite_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    "UPDATE properties SET generated_images = ? WHERE url = ?",
+                    (archived_json, url)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+            finally:
+                conn.close()
+        else:
+            try:
+                self.supabase.table("properties")\
+                    .update({"generated_images": archived_urls})\
+                    .eq("url", url)\
+                    .execute()
+                return True
+            except Exception as e:
+                print(f"Error updating archived images: {e}")
+                return False
+
     def mark_properties_inactive(self, urls: List[str]) -> int:
         """Mark properties as inactive (sold)"""
         if self.db_type == "sqlite":
