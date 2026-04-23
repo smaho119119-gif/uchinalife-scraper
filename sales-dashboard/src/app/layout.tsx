@@ -55,17 +55,22 @@ export const metadata: Metadata = {
 import Providers from "./providers";
 import SidebarWrapper from "@/components/sidebar-wrapper";
 import { Toaster } from "sonner";
+import { getCspNonce } from "@/lib/csp";
 
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read the per-request nonce so child <Script> tags can pick it up
+  // from a data attribute when needed. The CSP enforcing pass will
+  // start using it directly.
+  const nonce = await getCspNonce();
   return (
-    <html lang="ja" suppressHydrationWarning>
+    <html lang="ja" suppressHydrationWarning data-csp-nonce={nonce ?? ''}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning

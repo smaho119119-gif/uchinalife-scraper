@@ -14,7 +14,7 @@ const GITHUB_REPO = 'smaho119119-gif/uchinalife-scraper';
 const GITHUB_WORKFLOW_FILE = 'property-scraper.yml';
 
 // キャッシュ（10分間有効）
-let calendarCache: Map<string, { data: any; timestamp: number }> = new Map();
+const calendarCache: Map<string, { data: unknown; timestamp: number }> = new Map();
 const CACHE_DURATION = 10 * 60 * 1000; // 10分
 
 interface DayStats {

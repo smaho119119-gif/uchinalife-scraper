@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApi } from '@/lib/use-api';
 import { ErrorBanner } from '@/components/ui/error-banner';
+import type { Property } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -88,10 +89,10 @@ function formatPrice(value: number): string {
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 500];
 
 export default function PropertiesPage() {
-    const { data: fetchedProperties, error: fetchError, loading, refetch } = useApi<any[]>(
+    const { data: fetchedProperties, error: fetchError, loading, refetch } = useApi<Property[]>(
         '/api/properties?limit=50000',
     );
-    const properties = fetchedProperties ?? [];
+    const properties: Property[] = fetchedProperties ?? [];
     const [searchTerm, setSearchTerm] = useState("");
     
     // フィルター状態

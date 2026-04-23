@@ -261,7 +261,7 @@ export default function TrendAnalytics() {
                                     borderRadius: '8px',
                                     color: '#fff'
                                 }}
-                                formatter={(value: any) => [`¥${value.toLocaleString()}`, '平均価格']}
+                                formatter={(value: number) => [`¥${value.toLocaleString()}`, '平均価格']}
                             />
                             <Line
                                 type="monotone"
