@@ -9,7 +9,9 @@ export const revalidate = 60;
 export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
-        const limit = parseIntParam(searchParams.get('limit'), 50, 1, 1000);
+        // Properties page asks for the full set client-side (~18k rows today).
+        // Cap at 25k so a typo in the URL cannot trigger a much larger query.
+        const limit = parseIntParam(searchParams.get('limit'), 50, 1, 25000);
 
         const properties = await getAllProperties(limit);
         return NextResponse.json(properties, {

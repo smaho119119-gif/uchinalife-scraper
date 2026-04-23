@@ -27,10 +27,33 @@ export const supabase = new Proxy({} as ReturnType<typeof getSupabase>, {
 // 物件データ関連
 // ============================================
 
+/**
+ * Active-properties listing for the dashboard table view.
+ *
+ * Returns only the columns actually consumed by the UI to keep the
+ * payload small (typical query: 18k rows × ~10 cols instead of 18k × 30+).
+ * `images` and `property_data` are still returned because the search /
+ * filter UI reads location strings out of property_data.
+ */
+const PROPERTIES_LIST_COLUMNS = [
+    'url',
+    'title',
+    'category',
+    'category_type',
+    'category_name_ja',
+    'genre_name_ja',
+    'price',
+    'company_name',
+    'images',
+    'property_data',
+    'is_active',
+    'first_seen_date',
+].join(',');
+
 export async function getAllProperties(limit: number = 50): Promise<Property[]> {
     const { data, error } = await supabase
         .from('properties')
-        .select('*')
+        .select(PROPERTIES_LIST_COLUMNS)
         .eq('is_active', true)
         .order('first_seen_date', { ascending: false })
         .limit(limit);
@@ -40,12 +63,13 @@ export async function getAllProperties(limit: number = 50): Promise<Property[]> 
         return [];
     }
 
-    return (data || []).map(row => ({
+    const rows = (data ?? []) as unknown as Record<string, unknown>[];
+    return rows.map((row) => ({
         ...row,
         images: safeParseJson<string[]>(row.images, []),
         property_data: safeParseJson(row.property_data),
-        is_active: Boolean(row.is_active)
-    }));
+        is_active: Boolean(row.is_active),
+    } as Property));
 }
 
 export async function getPropertyStats() {
