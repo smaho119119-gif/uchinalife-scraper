@@ -9,6 +9,9 @@ import {
 import {
     buildProposalImagePrompt,
     parseProposalTemplate,
+    buildStandardImagePrompt,
+    buildCollageImagePrompt,
+    isCollageTemplate,
 } from "@/prompts/property-image";
 import { getStandardModeInstructions } from "@/prompts/property-image-modes";
 
@@ -156,138 +159,26 @@ export async function generatePropertyImageWithPhotos(options: {
         // ===== スタンダードテンプレート（モード別処理） =====
         else if (template === 'standard') {
             console.log(`Using standard template with mode: ${options.mode}`);
-            
-            // モード別のレイアウト指示（テーブル化済み）
-            const modeInstructions = getStandardModeInstructions(options.mode);
-            
-            const staffSection = options.staffPhoto ? `
-【スタッフ写真の加工・配置】
-- 提供されたスタッフ写真を「案内ポーズ」に加工
-- 手を物件の方向に差し出し、案内している雰囲気に
-- 明るい笑顔で親しみやすい表情（必ず笑顔にする）
-- 右下に配置、円形の白い枠で囲む
-- 吹き出しに物件の魅力コメントを生成（10文字以内）` : '';
-
-            prompt = `
-日本語の不動産マーケティング画像を作成してください。
-${options.staffPhoto ? 'スタッフが物件を紹介するスタイルで。' : ''}
-
-【物件情報】
-📍 物件名: ${propertyDetails.title}
-💰 家賃: ${propertyDetails.price}
-🏠 間取り: ${propertyDetails.layout}
-📍 所在地: ${propertyDetails.address}
-🚗 駐車場: ${propertyDetails.parking}
-🐕 ペット: ${propertyDetails.pet}
-🏢 不動産会社: ${propertyDetails.company}
-
-${modeInstructions}
-${staffSection}
-
-【表示する文字（正確に日本語で）】
-- 「${propertyDetails.title}」
-- 「${propertyDetails.price}」（最も目立つように）
-- 「${propertyDetails.layout}」
-- 「${propertyDetails.parking}」
-- 「お問い合わせはこちら」
-${options.staffPhoto ? '- スタッフ吹き出し: 物件の魅力を表す短いコメント' : ''}
-
-【スタイル】
-${getStyleDescription(options.style)}
-- プロフェッショナルな不動産広告デザイン
-- アスペクト比: ${options.aspectRatio}
-
-【重要】
-- 全てのテキストは正確な日本語で表示
-- 文字が読みやすいようにコントラストを確保
-${options.staffPhoto ? '- スタッフ写真は「案内ポーズ」に加工（手を差し出して物件を紹介している雰囲気）' : ''}
-${options.propertyImages.length > 1 ? `- 提供された${options.propertyImages.length}枚の物件写真を使用` : ''}
-`;
+            prompt = buildStandardImagePrompt({
+                propertyDetails,
+                modeInstructions: getStandardModeInstructions(options.mode),
+                styleDescription: getStyleDescription(options.style),
+                propertyImageCount: options.propertyImages.length,
+                hasStaffPhoto: !!options.staffPhoto,
+                aspectRatio: options.aspectRatio,
+            });
         }
         // ===== コラージュ・雑誌風・オーバーレイテンプレート =====
-        else if (template === 'collage' || template === 'magazine' || template === 'overlay') {
+        else if (isCollageTemplate(template)) {
             console.log(`Using ${template} template prompt`);
-            
-            let templateInstructions = '';
-            if (template === 'collage') {
-                templateInstructions = `
-【コラージュレイアウト】
-- 複数の物件写真をコラージュ風に配置
-- 写真同士が少し重なり合うスタイル
-- 斜めに配置したり、サイズを変えて動きを出す
-- 中央に価格と物件名を大きく配置`;
-            } else if (template === 'magazine') {
-                templateInstructions = `
-【雑誌風レイアウト】
-- 不動産雑誌の1ページのようなデザイン
-- 大きなメイン写真と小さなサブ写真
-- 洗練されたタイポグラフィ
-- 見出し、本文、キャプションの階層構造`;
-            } else if (template === 'overlay') {
-                templateInstructions = `
-【オーバーレイレイアウト】
-- 物件写真を全面に配置
-- 半透明のオーバーレイで情報を重ねる
-- グラデーション効果で文字を読みやすく
-- 写真の魅力を最大限に活かす`;
-            }
-
-            const staffSection = options.staffPhoto ? `
-【スタッフ写真の加工・配置 - 重要】
-提供されたスタッフ写真を以下のように加工してください：
-■ ポーズの加工（必須）
-- スタッフが「物件を案内している」雰囲気に加工
-- 手を物件写真に向けて差し出し、案内しているポーズに変更
-- 明るい笑顔で親しみやすい表情（必ず笑顔にする）
-- 歯を見せた自然な笑顔が望ましい
-- 片手を物件の方向に伸ばし「こちらの物件です」と案内しているポーズ
-■ 配置
-- 右下に配置、円形の白い枠で囲む
-- 吹き出しに物件の魅力を表す短いコメントを日本語で生成
-  （例：「駐車場広々！」「ペットOK！」「便利な立地！」など）` : '';
-
-            const multiImageSection = options.propertyImages.length > 1 ? `
-【複数画像の使用 - 重要】
-提供された${options.propertyImages.length}枚の物件写真を全て使用してください。
-- メイン写真を大きく配置
-- サブ写真を小さく配置（コラージュ風）` : '';
-
-            prompt = `
-日本語の不動産マーケティング画像を作成してください。
-${options.staffPhoto ? 'スタッフが物件を紹介するスタイルで。' : ''}
-
-【物件情報】
-📍 物件名: ${propertyDetails.title}
-💰 家賃: ${propertyDetails.price}
-🏠 間取り: ${propertyDetails.layout}
-📍 所在地: ${propertyDetails.address}
-🚗 駐車場: ${propertyDetails.parking}
-🐕 ペット: ${propertyDetails.pet}
-🏢 不動産会社: ${propertyDetails.company}
-
-${templateInstructions}
-${staffSection}
-${multiImageSection}
-
-【表示する文字（正確に日本語で）】
-- 「${propertyDetails.title}」
-- 「${propertyDetails.price}」（最も目立つように）
-- 「${propertyDetails.layout}」
-- 「${propertyDetails.parking}」
-- 「お問い合わせはこちら」
-${options.staffPhoto ? '- スタッフ吹き出し: 物件の魅力を表す短いコメント（AIが物件データから生成）' : ''}
-
-【スタイル】
-${getStyleDescription(options.style)}
-- プロフェッショナルな不動産広告デザイン
-- アスペクト比: ${options.aspectRatio}
-
-【重要】
-- 全てのテキストは正確な日本語で表示
-- 文字が読みやすいようにコントラストを確保
-${options.staffPhoto ? '- スタッフ写真を必ず含め、吹き出しには物件の魅力を表す短いコメントを生成' : ''}
-${options.propertyImages.length > 1 ? '- 提供された全ての物件写真を使用' : ''}
-`;
+            prompt = buildCollageImagePrompt({
+                template,
+                propertyDetails,
+                styleDescription: getStyleDescription(options.style),
+                propertyImageCount: options.propertyImages.length,
+                hasStaffPhoto: !!options.staffPhoto,
+                aspectRatio: options.aspectRatio,
+            });
         }
         // ビジネス資料モード（インフォグラフィック）
         else if (options.mode === 'document' && options.style === 'business') {
