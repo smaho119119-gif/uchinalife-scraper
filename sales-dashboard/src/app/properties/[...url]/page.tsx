@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -131,7 +132,9 @@ export default function PropertyDetailPage() {
             await loadHistory();
         } catch (e) {
             console.error('Generate copy failed:', e);
-            alert('セールスコピーの生成に失敗しました。しばらく待ってから再度お試しください。');
+            toast.error('セールスコピーの生成に失敗しました', {
+                description: 'しばらく待ってから再度お試しください。',
+            });
         } finally {
             setGenerating(false);
         }
@@ -173,7 +176,9 @@ export default function PropertyDetailPage() {
             }
         } catch (e) {
             console.error('Generate image failed:', e);
-            alert('画像の生成に失敗しました。条件を変えて再度お試しください。');
+            toast.error('画像の生成に失敗しました', {
+                description: '条件を変えて再度お試しください。',
+            });
         } finally {
             setGeneratingImage(false);
         }
@@ -217,7 +222,10 @@ export default function PropertyDetailPage() {
             setPopularityAnalysis(data.analysis);
             setAnalysisStats(data.stats);
         } catch (e) {
-            alert("分析の生成に失敗しました");
+            console.error('Analyze popularity failed:', e);
+            toast.error('人気分析の生成に失敗しました', {
+                description: 'しばらく待ってから再度お試しください。',
+            });
         } finally {
             setAnalyzingPopularity(false);
         }

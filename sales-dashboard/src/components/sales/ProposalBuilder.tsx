@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -128,6 +129,7 @@ export default function ProposalBuilder({ onPreview }: Props) {
   const confirmRemoveProperty = () => {
     if (pendingRemoveUrl) {
       setSelectedUrls((prev) => prev.filter((u) => u !== pendingRemoveUrl));
+      toast.success("物件を提案リストから削除しました");
     }
     setPendingRemoveUrl(null);
   };
@@ -151,6 +153,7 @@ export default function ProposalBuilder({ onPreview }: Props) {
     setSelectedUrls([]);
     setIncludeMarketData(false);
     localStorage.removeItem(STORAGE_KEY);
+    toast.success("提案書の下書きを削除しました");
   };
 
   const canPreview = selectedUrls.length > 0;

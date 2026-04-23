@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ImageIcon, Loader2, Copy, ExternalLink, Trash2, User } from 'lucide-react';
@@ -502,13 +503,23 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                                             autoFocus
                                             onClick={async (e) => {
                                                 e.stopPropagation();
+                                                let ok = true;
                                                 try {
-                                                    await fetch(`/api/staff-photos?id=${photo.id}`, { method: 'DELETE' });
+                                                    const res = await fetch(`/api/staff-photos?id=${photo.id}`, { method: 'DELETE' });
+                                                    if (!res.ok) ok = false;
                                                 } catch (error) {
                                                     console.error('Failed to delete staff photo:', error);
+                                                    ok = false;
                                                 }
-                                                if (selectedStaffId === photo.id) setSelectedStaffId(null);
-                                                setSavedStaffPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+                                                if (ok) {
+                                                    if (selectedStaffId === photo.id) setSelectedStaffId(null);
+                                                    setSavedStaffPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+                                                    toast.success(`「${photo.name}」を削除しました`);
+                                                } else {
+                                                    toast.error('スタッフ写真の削除に失敗しました', {
+                                                        description: 'しばらく待ってから再度お試しください。',
+                                                    });
+                                                }
                                                 setDeleteConfirmId(null);
                                             }}
                                         >

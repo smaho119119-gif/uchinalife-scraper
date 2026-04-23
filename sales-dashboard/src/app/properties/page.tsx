@@ -624,8 +624,8 @@ export default function PropertiesPage() {
 
             {/* テーブル */}
             <Card className="bg-slate-900/80 border-slate-800 backdrop-blur-sm">
-                <CardContent className="p-0">
-                    <Table>
+                <CardContent className="p-0 overflow-x-auto">
+                    <Table className="min-w-[720px]">
                         <TableHeader>
                             <TableRow className="border-slate-800 hover:bg-slate-900">
                                 <TableHead className="text-slate-400">物件名</TableHead>
