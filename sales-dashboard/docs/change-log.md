@@ -1,5 +1,40 @@
 # Change Log
 
+## 2026-04-23 — Round 3 (admin split + lib cleanup + toast infra)
+
+### admin/page.tsx 分割 (R3-01 Phase 1)
+- `src/app/admin/types.ts` を新設し、9つの interface を集約（page から ~170行削減）
+- `src/components/admin/StatsOverviewPanel.tsx` — KPI / charts / GitHub workflow history / quick links
+- `src/components/admin/ScrapingSettingsPanel.tsx` — 設定値表示 + env リファレンス
+- `src/components/admin/GeneratedImagesGallery.tsx` — DB / ローカル両画像のギャラリーとプレビューモーダル（Esc / role=dialog 対応）
+- `src/components/admin/LogViewerPanel.tsx` — ログ選択 + 再読込 + ファイル一覧（aria-pressed の選択状態）
+- `src/app/admin/page.tsx`: 2255行 → **1427行** (≒ 36% 削減、各 panel が独立検証可能に)
+
+### Toast 基盤 (R3-07)
+- `sonner` を導入、`src/app/layout.tsx` に `Toaster` を配置
+- 今後の R4 で各画面の成功/失敗 feedback に活用
+
+### lib のクリーンアップ (R3-11)
+- `src/lib/supabase.ts` と `src/lib/index.ts` を **物理削除**
+- 使用元 6 ファイルを `@/lib/db`（実装）と `@/lib/types`（型のみ）に切り替え
+
+### 型安全化 (R3-08)
+- `src/lib/ai.ts`: `@ts-ignore` → `@ts-expect-error` （SDK が responseModalities をサポートしたら検出される）
+
+### Round 3 で着手しなかったもの（明示）→ Round 4 へ
+- R3-02: InteractiveMap.tsx の useReducer 化（738行）
+- R3-04: sales/* component の hooks 抽出
+- R3-05: モバイルレイアウト全面対応
+- R3-06: WCAG コントラスト全面修正
+- 理由: 1コミットの規模が大きく独立検証が必要。Round 4 で1機能ずつ着手
+
+### 副作用チェック
+- `npx tsc --noEmit` → 0 errors
+- `npx next build` → 全ルート生成成功
+- レスポンス互換性: 維持（admin タブの内部構造分割のみ、外部APIは不変）
+
+---
+
 ## 2026-04-23 — Round 2 (architectural debt + security)
 
 ### 追加 (Infrastructure)
@@ -41,15 +76,3 @@
 - `npx tsc --noEmit` → 0 errors
 - `npx next build` → 全ルート生成成功
 - 既存レスポンス互換性: stats/analytics/featured 全て維持
-- middleware 仕様変更（headers のみ追加、auth ロジック不変）
-- lib/db.ts は Proxy 経由で getSupabase に。既存 `import { supabase } from '@/lib/db'` は呼び出し時に env 検証するよう変更（テスト環境を持たない呼び出しでは初回アクセス時に throw する）
-
-### 残課題 → Round 3 へ持ち越し (`docs/issues.md`)
-- admin/page.tsx (2255行) の分割
-- InteractiveMap.tsx (738行) の useReducer 化
-- AI prompts の templates 化
-- sales/* コンポーネント の hooks 抽出
-- モバイルレイアウト全面対応
-- WCAG コントラスト全面修正
-- Toast 通知システム
-- Supabase RLS 強化（バックエンドDBスキーマ移行が必要）

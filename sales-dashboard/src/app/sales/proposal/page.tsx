@@ -5,7 +5,7 @@ import { FileText, Loader2 } from "lucide-react";
 import ProposalBuilder from "@/components/sales/ProposalBuilder";
 import type { ProposalData } from "@/components/sales/ProposalBuilder";
 import ProposalPreview from "@/components/sales/ProposalPreview";
-import type { Property } from "@/lib/supabase";
+import type { Property } from '@/lib/types';
 import { extractCityName } from "@/lib/area";
 import { parsePrice, calcMarketStats } from "@/lib/price";
 

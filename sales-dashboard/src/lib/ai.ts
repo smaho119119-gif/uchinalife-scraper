@@ -163,7 +163,7 @@ export async function generatePropertyImageWithPhotos(options: {
             model: modelConfig.id,
             generationConfig: {
                 temperature: 1.0,
-                // @ts-ignore - responseModalities is valid for Gemini image models
+                // @ts-expect-error responseModalities is accepted at runtime by Gemini image models but is not yet in the SDK type defs (re-check after @google/generative-ai upgrade).
                 responseModalities: ['TEXT', 'IMAGE'],
             }
         });
@@ -1036,7 +1036,7 @@ export async function generatePropertyImage(options: {
             model: modelConfig.id,
             generationConfig: {
                 temperature: 1.0,
-                // @ts-ignore - responseModalities is valid for Gemini image models
+                // @ts-expect-error responseModalities is accepted at runtime by Gemini image models but is not yet in the SDK type defs (re-check after @google/generative-ai upgrade).
                 responseModalities: ['TEXT', 'IMAGE'],
             }
         });

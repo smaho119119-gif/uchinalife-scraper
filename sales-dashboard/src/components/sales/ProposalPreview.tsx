@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Printer } from "lucide-react";
 import type { ProposalData } from "./ProposalBuilder";
-import type { Property } from "@/lib/supabase";
+import type { Property } from '@/lib/types';
 import { extractCityName } from "@/lib/area";
 import { formatPrice, parsePrice } from "@/lib/price";
 

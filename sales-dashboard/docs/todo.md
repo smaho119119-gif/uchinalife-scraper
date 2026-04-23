@@ -1,4 +1,4 @@
-# TODO (Bug Hunt Rounds)
+# TODO
 
 ## ✅ Round 1 完了
 基盤系（Supabase env / JSON parse / 認証 / mobile sidebar / metadata / abort / parseInt 等）
@@ -6,25 +6,30 @@
 ## ✅ Round 2 完了
 - 型集約 (lib/types.ts)
 - propertyCache SSR-safe化
-- 残クライアント fetch を useApi 化（properties / analytics / area-analysis / AreaAnalytics / TrendAnalytics）
+- 残クライアント fetch を useApi 化
 - ErrorBanner 主要 page 展開
-- NextAuth maxAge / セキュリティヘッダ (CSP, HSTS, X-Frame-Options, etc.)
+- NextAuth maxAge / セキュリティヘッダ
 - AI / scraping / staff-photos のレートリミット
 - Date JST/UTC 修正、calendar bounds、RPC param allowlist
 - ConfirmDialog で破壊的操作確認
-- a11y polish 第一弾
+- a11y 第一弾
 
-## 🔜 Round 3 候補（優先度順）
-1. **admin/page.tsx 2255行 の分割**（最大の負債）
-2. **InteractiveMap.tsx 738行 の useReducer + hooks化**
-3. **Supabase RLS ポリシー設計と移行**
-4. **モバイルレイアウト全面対応**（特に properties / sales/area-analysis / map）
-5. **WCAG コントラスト全面修正**（テキスト色）
-6. **Toast 通知システム導入**（成功/失敗フィードバック）
-7. **AI prompts の templates 化**
-8. **sales/* の hooks 抽出 + 単体テスト**
-9. **lib/ai.ts の `@ts-ignore` 解消**
-10. **lib/supabase.ts / lib/index.ts の物理削除**
+## ✅ Round 3 完了
+- admin/page.tsx を types + 4 panel コンポーネントに分割（2255 → 1427行）
+- sonner 導入 + Toaster 配置
+- lib/supabase.ts と lib/index.ts を物理削除（呼び出し移行込み）
+- @ts-ignore → @ts-expect-error
+
+## 🔜 Round 4 候補（優先度順）
+1. **InteractiveMap.tsx 738行 を useReducer + 抽出 hooks に**
+2. **ProposalBuilder / MarketPriceCalculator の logic を hooks へ**（unit testable に）
+3. **モバイルレイアウト: properties / sales/area-analysis / map**
+4. **WCAG コントラスト全面修正**（slate-400 → slate-300 等）
+5. **Toast を実際に使う**: 提案書保存、画像生成成功、エラー時のフィードバック
+6. **AI prompts を `src/prompts/` に分離**
+7. **Supabase RLS 設計と移行**（DBスキーマ要協調）
+8. **テーブル virtualization (react-window)** ※ データ量増えたら
+9. **Property.property_data の値型厳密化**
 
 ## 持続的観点
 - Round ごとに必ずビルド + typecheck + 副作用検証

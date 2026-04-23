@@ -1,4 +1,4 @@
-import { getGeneratedImages, deleteGeneratedImage } from '@/lib/supabase';
+import { getGeneratedImages, deleteGeneratedImage } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';

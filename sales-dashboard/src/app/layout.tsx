@@ -23,6 +23,7 @@ export const metadata: Metadata = {
 
 import Providers from "./providers";
 import SidebarWrapper from "@/components/sidebar-wrapper";
+import { Toaster } from "sonner";
 
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -47,6 +48,14 @@ export default function RootLayout({
             </main>
             <Footer />
           </div>
+          <Toaster
+            position="top-right"
+            richColors
+            closeButton
+            toastOptions={{
+              className: 'text-sm',
+            }}
+          />
         </Providers>
       </body>
     </html>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { supabase, getGeneratedImages } from '@/lib/supabase';
+import { supabase, getGeneratedImages } from '@/lib/db';
 import { enforceRateLimit } from '@/lib/auth-helpers';
 
 // テーブル名
