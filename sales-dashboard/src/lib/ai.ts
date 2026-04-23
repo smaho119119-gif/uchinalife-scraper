@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import { getStyleDescription } from "@/lib/ai-styles";
+import { buildSalesCopyPrompt } from "@/prompts/sales-copy";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
@@ -66,26 +67,7 @@ export async function generateSalesCopy(
     modelKey: TextModelKey = 'gemini-3-pro'
 ) {
     const modelConfig = AI_MODELS.text[modelKey];
-    
-    const prompt = `
-あなたはトップクラスの不動産営業マンです。以下の物件情報をもとに、
-魅力的で説得力のあるセールスコピーを作成してください。
-
-物件情報:
-- タイトル: ${property.title}
-- 価格: ${property.price}
-- カテゴリ: ${property.category_name_ja} / ${property.genre_name_ja}
-- 会社: ${property.company_name}
-- 詳細: ${JSON.stringify(property.property_data, null, 2)}
-
-以下の要素を含めてください:
-1. キャッチコピー（目を引く一文）
-2. 物件の主要な魅力ポイント（3-5点）
-3. ターゲット層への訴求
-4. 行動喚起（CTA）
-
-Markdown形式で、見出しや箇条書きを使って読みやすく作成してください。
-`;
+    const prompt = buildSalesCopyPrompt(property);
 
     try {
         if (modelConfig.provider === 'openai') {

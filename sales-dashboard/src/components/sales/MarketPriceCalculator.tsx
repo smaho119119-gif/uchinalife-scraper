@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useMarketPriceSearch } from "@/lib/use-market-price";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -118,28 +119,7 @@ const MADORI_OPTIONS = [
 // API response types
 // --------------------------------------------------------------------------
 
-interface MarketPriceResult {
-  stats: {
-    avg: number;
-    median: number;
-    min: number;
-    max: number;
-    count: number;
-  };
-  tsuboStats?: {
-    avgPerTsubo: number;
-    medianPerTsubo: number;
-  };
-  histogram: { range: string; count: number }[];
-  areaComparison: {
-    area: string;
-    count: number;
-    avg: number;
-    median: number;
-    min: number;
-    max: number;
-  }[];
-}
+// MarketPriceResult moved to lib/use-market-price.ts
 
 // --------------------------------------------------------------------------
 // Component
@@ -154,9 +134,7 @@ export default function MarketPriceCalculator() {
 
   // UI state
   const [showConditions, setShowConditions] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<MarketPriceResult | null>(null);
-  const [error, setError] = useState<string>("");
+  const { result, loading, error, search } = useMarketPriceSearch();
 
   const isRental = RENTAL_IDS.has(selectedCategory);
   const showMadori = RESIDENTIAL_IDS.has(selectedCategory);
@@ -171,34 +149,15 @@ export default function MarketPriceCalculator() {
 
   // ---- Search handler ----
 
-  const handleSearch = useCallback(async () => {
+  const handleSearch = useCallback(() => {
     if (!canSearch) return;
-
-    setLoading(true);
-    setError("");
-    setResult(null);
-
-    try {
-      const params = new URLSearchParams({
-        area: selectedArea,
-        category: selectedCategory,
-      });
-      if (showMadori && madori) params.set("madori", madori);
-      if (showAge && ageMax < 30) params.set("age_max", String(ageMax));
-
-      const res = await fetch(`/api/sales/market-price?${params.toString()}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `検索に失敗しました (${res.status})`);
-      }
-      const data: MarketPriceResult = await res.json();
-      setResult(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "エラーが発生しました");
-    } finally {
-      setLoading(false);
-    }
-  }, [canSearch, selectedArea, selectedCategory, madori, ageMax, showMadori, showAge]);
+    search({
+      area: selectedArea,
+      category: selectedCategory,
+      madori: showMadori ? madori : undefined,
+      ageMax: showAge && ageMax < 30 ? ageMax : undefined,
+    });
+  }, [canSearch, selectedArea, selectedCategory, madori, ageMax, showMadori, showAge, search]);
 
   // ---- Price display helper ----
 

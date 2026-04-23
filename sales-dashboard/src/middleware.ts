@@ -11,9 +11,10 @@ import { getToken } from 'next-auth/jwt';
  * - Everything else requires a valid NextAuth session.
  *
  * Headers: every response carries a baseline set of HTTP security headers
- * (CSP, HSTS, X-Frame-Options, Referrer-Policy, etc.). The CSP allows
- * inline styles (Tailwind/Next runtime needs them) and unsafe-eval (Next
- * dev/HMR), but blocks third-party scripts.
+ * (CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP, etc.). The CSP allows
+ * inline styles (Tailwind / React style props), and inline scripts (Next.js
+ * bootstrap). 'unsafe-eval' is enabled only in dev for HMR. Tightening to a
+ * nonce-based CSP is tracked in docs/todo.md.
  */
 const PUBLIC_PAGE_PREFIXES = [
     '/sales/featured',
@@ -31,6 +32,37 @@ function isPublicPath(pathname: string): boolean {
     return PUBLIC_PAGE_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
+function buildCsp(): string {
+    // script-src:
+    //   - 'unsafe-inline' is still required by Next.js inline bootstrap script
+    //   - 'unsafe-eval' is only needed for HMR / React DevTools (dev-only)
+    // style-src:
+    //   - 'unsafe-inline' stays — React style props + Tailwind require it
+    //   - removing it would break virtually every component until we hash/nonce styles
+    //
+    // Tightening to nonce-based CSP requires emitting a per-request nonce
+    // and threading it into <Script> / <link> tags. Tracked in docs/todo.md.
+    const scriptSrc = IS_DEV
+        ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+        : "script-src 'self' 'unsafe-inline'";
+
+    return [
+        "default-src 'self'",
+        scriptSrc,
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data:",
+        "connect-src 'self' https://*.supabase.co https://api.github.com https://generativelanguage.googleapis.com https://api.openai.com",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+        "upgrade-insecure-requests",
+    ].join('; ');
+}
+
 function applySecurityHeaders(res: NextResponseType): NextResponseType {
     res.headers.set('X-Frame-Options', 'DENY');
     res.headers.set('X-Content-Type-Options', 'nosniff');
@@ -43,23 +75,8 @@ function applySecurityHeaders(res: NextResponseType): NextResponseType {
         'Strict-Transport-Security',
         'max-age=31536000; includeSubDomains',
     );
-    // CSP: allow inline styles (Tailwind, Next runtime), our Supabase project,
-    // OSM tiles for Leaflet, DiceBear avatars, GitHub API, blob/data URIs for
-    // generated images. Tighten with hashes/nonces in a future round.
-    res.headers.set(
-        'Content-Security-Policy',
-        [
-            "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: blob: https:",
-            "font-src 'self' data:",
-            "connect-src 'self' https://*.supabase.co https://api.github.com https://generativelanguage.googleapis.com https://api.openai.com",
-            "frame-ancestors 'none'",
-            "base-uri 'self'",
-            "form-action 'self'",
-        ].join('; '),
-    );
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.headers.set('Content-Security-Policy', buildCsp());
     return res;
 }
 
