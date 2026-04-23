@@ -332,8 +332,8 @@ export default function AdminPage() {
 
             {/* タブナビゲーション */}
             <Tabs defaultValue="overview" className="space-y-6">
-                <div className="flex gap-2 flex-wrap">
-                    <TabsList className="inline-flex h-auto p-1 bg-transparent gap-2">
+                <div className="flex gap-2 overflow-x-auto -mx-1 px-1 sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0">
+                    <TabsList className="inline-flex h-auto p-1 bg-transparent gap-2 min-w-max sm:min-w-0">
                         <TabsTrigger 
                             value="overview"
                             className="px-6 py-3 rounded-full border-2 border-transparent bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:border-cyan-400 data-[state=active]:shadow-lg data-[state=active]:shadow-cyan-500/30 font-medium transition-all duration-300"

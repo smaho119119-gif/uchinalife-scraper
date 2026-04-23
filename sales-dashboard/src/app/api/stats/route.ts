@@ -9,7 +9,7 @@ const CATEGORY_TYPE_MAP: Record<string, string> = {
 
 export async function GET() {
     try {
-        const supabase = getSupabase();
+        const supabase = getSupabase('anon');
         const { data, error } = await supabase.rpc('dashboard_stats');
         if (error) throw error;
 

@@ -133,7 +133,7 @@ function utcToJSTDate(utcDateString: string): string {
 // Supabaseのデータ保存状況を確認（JST日付で）
 async function checkSupabaseData(date: string): Promise<{ saved: boolean; count: number }> {
     try {
-        const supabase = getSupabase();
+        const supabase = getSupabase('service');
         // JST日付をUTC時刻範囲に変換（自動的にタイムゾーン差を調整）
         const { startUTC, endUTC } = getJSTDateRange(date);
 
@@ -158,7 +158,7 @@ async function checkSupabaseData(date: string): Promise<{ saved: boolean; count:
 // Supabaseのデータ保存状況を確認（特定の時刻範囲で）
 async function checkSupabaseDataInRange(startUTC: string, endUTC: string): Promise<{ saved: boolean; count: number }> {
     try {
-        const supabase = getSupabase();
+        const supabase = getSupabase('service');
 
         const { count, error } = await supabase
             .from('properties')
@@ -252,7 +252,7 @@ async function getMonthCalendar(year: number, month: number) {
 
     try {
         {
-            const supabase = getSupabase();
+            const supabase = getSupabase('service');
             const { data: snapshots } = await supabase
                 .from('daily_link_snapshots')
                 .select('snapshot_date, category, url_count')
@@ -403,7 +403,7 @@ async function getDayDetails(date: string) {
     const snapshotCategories: Record<string, number> = {};
     try {
         {
-            const supabase = getSupabase();
+            const supabase = getSupabase('service');
             const snapshotResult = await supabase
                 .from('daily_link_snapshots')
                 .select('category, url_count')

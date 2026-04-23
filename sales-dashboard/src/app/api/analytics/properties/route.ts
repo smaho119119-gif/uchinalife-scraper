@@ -23,7 +23,7 @@ function startOfTodayJSTAsUtc(): string {
 
 export async function GET(request: Request) {
     try {
-        const supabase = getSupabase();
+        const supabase = getSupabase('anon');
         const { searchParams } = new URL(request.url);
         const rawFilter = searchParams.get('filter');
         const rawCategory = searchParams.get('category');

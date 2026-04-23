@@ -10,7 +10,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const days = parseIntParam(searchParams.get('days'), 30, 1, 365);
 
-        const supabase = getSupabase();
+        const supabase = getSupabase('anon');
         const { data, error } = await supabase.rpc('analytics_trends', { p_days: days });
         if (error) throw error;
 

@@ -2,6 +2,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import { getStyleDescription } from "@/lib/ai-styles";
 import { buildSalesCopyPrompt } from "@/prompts/sales-copy";
+import {
+    extractPropertyDetails,
+    buildPropertyHighlights,
+} from "@/prompts/property-fields";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
@@ -122,39 +126,9 @@ export async function generatePropertyImageWithPhotos(options: {
         // Build prompt based on mode and whether staff photo is included
         let prompt = '';
         
-        // 物件詳細情報を抽出
-        const pd = options.propertyData.property_data || {};
-        const propertyDetails = {
-            title: options.propertyData.title || '',
-            price: pd['家賃'] || pd['価格'] || options.propertyData.price || '',
-            deposit: pd['敷金／礼金'] || pd['敷金'] || '',
-            layout: pd['間取り'] || '',
-            address: pd['所在地'] || pd['住所'] || '',
-            parking: pd['駐車場'] || '',
-            area: pd['専有面積'] || pd['面積'] || '',
-            building: pd['建物構造'] || '',
-            floor: pd['部屋番号'] || pd['階'] || '',
-            pet: pd['ペット'] || '',
-            security: pd['セキュリティ'] || '',
-            equipment: pd['家具・家電'] || pd['設備'] || '',
-            bath: pd['バス・トイレ'] || '',
-            kitchen: pd['キッチン'] || '',
-            storage: pd['収納'] || '',
-            internet: pd['放送・通信'] || '',
-            school: pd['小学校'] || '',
-            company: pd['不動産会社'] || options.propertyData.company_name || '',
-            remarks: pd['備考'] || '',
-        };
-
-        // 主要ポイントを抽出（空でないものだけ）
-        const highlights = [
-            propertyDetails.layout && `間取り: ${propertyDetails.layout}`,
-            propertyDetails.price && `家賃: ${propertyDetails.price}`,
-            propertyDetails.deposit && `敷金/礼金: ${propertyDetails.deposit}`,
-            propertyDetails.parking && `駐車場: ${propertyDetails.parking}`,
-            propertyDetails.security && `セキュリティ: ${propertyDetails.security}`,
-            propertyDetails.pet && `ペット: ${propertyDetails.pet}`,
-        ].filter(Boolean).slice(0, 6);
+        // 物件詳細を抽出（共通 helper）
+        const propertyDetails = extractPropertyDetails(options.propertyData);
+        const highlights = buildPropertyHighlights(propertyDetails);
 
         const template = options.template || 'standard';
         

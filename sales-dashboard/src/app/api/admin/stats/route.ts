@@ -4,7 +4,7 @@ export const revalidate = 60;
 
 export async function GET() {
     try {
-        const supabase = getSupabase();
+        const supabase = getSupabase('service');
         const { data, error } = await supabase.rpc('admin_stats');
         if (error) throw error;
         return NextResponse.json(

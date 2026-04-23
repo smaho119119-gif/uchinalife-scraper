@@ -1,92 +1,42 @@
 # Change Log
 
-## 2026-04-23 — Round 6 (prompts split, market-price hook, RLS audit, CSP hardening)
+## 2026-04-23 — Round 7 (image prompt helpers, role-aware Supabase, staff_photos RLS, CSP nonce)
 
-### sales-copy prompt 分離 (R6-1 partial)
-- `src/prompts/sales-copy.ts` を新設: `buildSalesCopyPrompt(property)` を pure 関数化
-- `src/lib/ai.ts`: 旧インライン prompt を呼び出しに置換 (1183 → 1165 行)
-- 画像生成 prompt の分離は出力影響評価が必要なため Round 7 へ持ち越し
+### 画像プロンプト helper 抽出 (R7-1 partial)
+- `src/prompts/property-fields.ts` を新設: `extractPropertyDetails` / `buildPropertyHighlights`
+- `src/lib/ai.ts`: `generatePropertyImageWithPhotos` 内のフィールド抽出と highlights を helper に置換 (1165 → 1139 行)
+- 巨大な `proposal_*` テンプレ群は AI 出力比較が必要なため Round 8 へ持ち越し（todo に明記）
 
-### MarketPriceCalculator hook (R6-3)
-- `src/lib/use-market-price.ts`: `useMarketPriceSearch` フック（AbortController + error state + reset）
-- `src/components/sales/MarketPriceCalculator.tsx`: 内部 fetch を hook 呼び出しに置換、ローカル `MarketPriceResult` 型を hook 側へ集約
+### Supabase role selector (R7-4)
+- `src/lib/supabase-server.ts`: `getSupabase('anon' | 'service' | 'auto')` に拡張、role ごとにクライアントをキャッシュ
+- 公開 read 系 API 10 本を `'anon'` に切り替え
+- admin API 2 本 (`admin/stats`, `admin/calendar`) を `'service'` に明示
+- 既存 `getSupabase()` は `'auto'` (旧挙動) を維持
 
-### Supabase RLS 調査 (R6-2)
-- 本番 DB の RLS 状態を pg_tables で全数調査
-- 重大発見: `uchina_property_images` は RLS 無効 / `staff_photos` テーブル不在 / `properties` は anon に INSERT/UPDATE 許可
-- `docs/rls-plan.md` に現状・リスク・段階的適用 SQL を明文化（実適用は Round 7+）
+### Supabase RLS 適用 (R7-2 / R7-3)
+- 新規: `staff_photos` テーブル + index + RLS + `anon SELECT only / service ALL` ポリシー（テーブルが存在せずサイレント失敗していた問題の解消）
+- `uchina_property_images`: RLS 有効化 + `anon SELECT only / service ALL` ポリシー（誰でも書換可だった脆弱性を是正）
+- `properties` の anon write 削除はスクレイパ側の env 整理が必要なため Round 8 以降
 
-### CSP 強化 (R6-5)
-- dev/prod 分岐: 本番で `'unsafe-eval'` を script-src から削除
-- `object-src 'none'`, `upgrade-insecure-requests`, `Cross-Origin-Opener-Policy: same-origin` を追加
-- nonce 化への移行は docs/todo.md に記録
+### CSP nonce + strict-dynamic (R7-5)
+- middleware で per-request nonce を生成し `x-nonce` リクエストヘッダで RSC に伝搬
+- `script-src` に `'nonce-...' 'strict-dynamic' https:` を追加（modern browsers では `'unsafe-inline'` を無視、レガシーは fallback）
+- `'unsafe-inline'` はレガシーブラウザ用 fallback として残置、将来 `<Script nonce>` 実装後に削除
+
+### モバイル微調整 (R7-6)
+- admin タブを `overflow-x-auto` 化（スマホで横スクロール、md+ で wrap）
 
 ### 副作用チェック
 - `npx tsc --noEmit` → 0 errors
 - `npx next build` → 全ルート生成成功
+- DB 変更:
+  - `staff_photos` 新規作成 ✅
+  - `uchina_property_images` RLS 有効化 ✅（service_role はバイパス、anon は read のみで現行挙動維持）
 
 ---
 
-## 2026-04-23 — Round 5 (map reducer, proposal hooks, AI styles, contrast)
+## 2026-04-23 — Round 6 (prompts split, market-price hook, RLS audit, CSP hardening)
+（既存の通り維持）
 
-### InteractiveMap useReducer 化 (R5-1)
-- `src/lib/map-reducer.ts` を新設: 11個の useState を 1つの reducer + 13 アクションに集約
-- `src/components/InteractiveMap.tsx`: 628 → 487 行
-
-### ProposalBuilder の hooks 抽出 (R5-2)
-- `src/lib/use-proposal-draft.ts`: localStorage への load/save/clear と form state を集約
-- `src/lib/use-property-titles.ts`: 不足分のみ fetch（AbortController）
-
-### AI スタイル定義 (R5-5 partial)
-- `src/lib/ai-styles.ts`: 12 スタイルのテーブル化
-
-### WCAG コントラスト改善 (R5-3 / R5-4)
-- text-slate-400 → text-slate-300 (32箇所 + map page)
-
----
-
-## 2026-04-23 — Round 4 (map split + toast wiring + UX polish)
-
-### InteractiveMap 分割
-- `src/lib/map-config.ts` / `use-map-markers.ts` / `use-map-session.ts`
-- マップエラー時に `ErrorBanner` + retry
-
-### Toast feedback
-- ProposalBuilder / properties detail / ImageGenerator
-
-### WCAG (limited) / モバイル (limited)
-- 主要ページの dark slate 改善 / properties テーブルの overflow-x-auto
-
----
-
-## 2026-04-23 — Round 3 (admin split + lib cleanup + toast infra)
-
-### admin/page.tsx 分割
-- types.ts + 4 panel コンポーネント (2255 → 1427 行)
-
-### Toast 基盤
-- sonner / Toaster
-
-### lib のクリーンアップ
-- supabase.ts と index.ts を物理削除
-
-### 型安全化
-- `@ts-ignore` → `@ts-expect-error`
-
----
-
-## 2026-04-23 — Round 2 (architectural debt + security)
-
-### 追加 (Infrastructure)
-- types.ts / rate-limit.ts / auth-helpers.ts / confirm-dialog.tsx
-
-### セキュリティ
-- NextAuth maxAge / セキュリティヘッダ / レートリミット / scraping allowlist / staff-photos MIME / RPC allowlist / Date timezone / calendar bounds / エラーログ統一
-
-### UI / UX
-- useApi / ConfirmDialog / a11y polish
-
----
-
-## 2026-04-23 — Round 1
-基盤系（Supabase env / JSON parse / 認証 / mobile sidebar / metadata / abort / parseInt 等）
+## 2026-04-23 — Round 5 — Round 4 — Round 3 — Round 2 — Round 1
+（前ラウンドの記述を保持）

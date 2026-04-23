@@ -181,7 +181,7 @@ interface RawProperty {
 async function fetchAllPropertiesForCategory(
   category: string,
 ): Promise<RawProperty[]> {
-  const supabase = getSupabase();
+  const supabase = getSupabase('anon');
   const results: RawProperty[] = [];
   let from = 0;
   const pageSize = 1000;

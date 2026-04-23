@@ -8,7 +8,7 @@ export const revalidate = 600;
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabase();
+    const supabase = getSupabase('anon');
     const { searchParams } = new URL(request.url);
     const rawCategory = searchParams.get('category') || '';
     const categoryFilter = rawCategory && isValidCategory(rawCategory) ? rawCategory : '';

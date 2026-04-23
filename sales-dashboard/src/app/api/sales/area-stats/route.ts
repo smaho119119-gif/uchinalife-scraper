@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
             ? (rawType as AllowedType)
             : 'all';
 
-        const supabase = getSupabase();
+        const supabase = getSupabase('anon');
         const { data, error } = await supabase.rpc('area_stats', {
             p_category: category,
             p_type: type,

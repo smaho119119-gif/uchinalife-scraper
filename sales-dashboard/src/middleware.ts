@@ -34,19 +34,34 @@ function isPublicPath(pathname: string): boolean {
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
-function buildCsp(): string {
+/**
+ * Build a per-request nonce. Used to mark inline `<script>` tags emitted
+ * by Next.js so they pass CSP `strict-dynamic` checks in modern browsers.
+ *
+ * `'strict-dynamic'` makes browsers ignore `'unsafe-inline'` (and host
+ * allowlists) and instead trust scripts that share the nonce. Older
+ * browsers fall back to the legacy directives, so behavior is unchanged
+ * there.
+ */
+function generateNonce(): string {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+}
+
+function buildCsp(nonce: string): string {
     // script-src:
-    //   - 'unsafe-inline' is still required by Next.js inline bootstrap script
-    //   - 'unsafe-eval' is only needed for HMR / React DevTools (dev-only)
+    //   - 'strict-dynamic' + nonce: trusted scripts only (modern browsers)
+    //   - 'unsafe-inline' kept as legacy fallback (ignored when strict-dynamic
+    //     is honored)
+    //   - 'unsafe-eval' only in dev for HMR / React DevTools
     // style-src:
     //   - 'unsafe-inline' stays — React style props + Tailwind require it
-    //   - removing it would break virtually every component until we hash/nonce styles
-    //
-    // Tightening to nonce-based CSP requires emitting a per-request nonce
-    // and threading it into <Script> / <link> tags. Tracked in docs/todo.md.
     const scriptSrc = IS_DEV
-        ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-        : "script-src 'self' 'unsafe-inline'";
+        ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' 'unsafe-eval' https:`
+        : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' https:`;
 
     return [
         "default-src 'self'",
@@ -63,7 +78,7 @@ function buildCsp(): string {
     ].join('; ');
 }
 
-function applySecurityHeaders(res: NextResponseType): NextResponseType {
+function applySecurityHeaders(res: NextResponseType, nonce: string): NextResponseType {
     res.headers.set('X-Frame-Options', 'DENY');
     res.headers.set('X-Content-Type-Options', 'nosniff');
     res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -76,38 +91,47 @@ function applySecurityHeaders(res: NextResponseType): NextResponseType {
         'max-age=31536000; includeSubDomains',
     );
     res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-    res.headers.set('Content-Security-Policy', buildCsp());
+    res.headers.set('Content-Security-Policy', buildCsp(nonce));
     return res;
+}
+
+/** Forward the nonce to the page via a request header so RSCs can read it. */
+function forwardNonce(req: NextRequest, nonce: string): NextResponseType {
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set('x-nonce', nonce);
+    return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export async function middleware(req: NextRequest) {
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
     const isAuth = !!token;
     const { pathname } = req.nextUrl;
+    const nonce = generateNonce();
 
     if (pathname.startsWith('/login')) {
         if (isAuth) {
-            return applySecurityHeaders(NextResponse.redirect(new URL('/', req.url)));
+            return applySecurityHeaders(NextResponse.redirect(new URL('/', req.url)), nonce);
         }
-        return applySecurityHeaders(NextResponse.next());
+        return applySecurityHeaders(forwardNonce(req, nonce), nonce);
     }
 
     if (isPublicPath(pathname)) {
-        return applySecurityHeaders(NextResponse.next());
+        return applySecurityHeaders(forwardNonce(req, nonce), nonce);
     }
 
     if (!isAuth) {
         if (pathname.startsWith('/api/')) {
             return applySecurityHeaders(
                 NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+                nonce,
             );
         }
         const loginUrl = new URL('/login', req.url);
         loginUrl.searchParams.set('callbackUrl', pathname);
-        return applySecurityHeaders(NextResponse.redirect(loginUrl));
+        return applySecurityHeaders(NextResponse.redirect(loginUrl), nonce);
     }
 
-    return applySecurityHeaders(NextResponse.next());
+    return applySecurityHeaders(forwardNonce(req, nonce), nonce);
 }
 
 export const config = {
