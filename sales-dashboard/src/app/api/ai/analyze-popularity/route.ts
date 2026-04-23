@@ -62,7 +62,8 @@ export async function POST(request: Request) {
         const cityMatch = address.match(/([\u4e00-\u9fa5]+[市町村区])/);
         const city = cityMatch ? cityMatch[1] : '';
         
-        let similarProperties: any[] = [];
+        interface SimilarProperty { price: string | null; property_data: unknown }
+        let similarProperties: SimilarProperty[] = [];
         let avgPrice = 0;
         let minPrice = 0;
         let maxPrice = 0;
@@ -412,10 +413,11 @@ ${popularPoints.length > 0 ? popularPoints.join('\n') : '特記事項なし'}
                 console.log(`Successfully generated with: ${actualModelUsed}`);
                 break; // 成功したらループを抜ける
                 
-            } catch (modelError: any) {
-                console.error(`Model ${fallbackModel.name} failed:`, modelError?.message || modelError);
+            } catch (modelError: unknown) {
+                const errObj = modelError as { message?: string; status?: number };
+                console.error(`Model ${fallbackModel.name} failed:`, errObj.message || modelError);
                 // 503エラーまたはモデルオーバーロードの場合は次のモデルを試す
-                if (modelError?.status === 503 || modelError?.message?.includes('overloaded')) {
+                if (errObj.status === 503 || errObj.message?.includes('overloaded')) {
                     console.log(`Model ${fallbackModel.name} is overloaded, trying next fallback...`);
                     continue;
                 }

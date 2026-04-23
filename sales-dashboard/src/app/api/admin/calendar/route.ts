@@ -428,8 +428,13 @@ async function getDayDetails(date: string) {
                 .eq('snapshot_date', date);
 
             if (snapshotResult.data && snapshotResult.data.length > 0) {
-                snapshotLinks = snapshotResult.data.reduce((sum: number, s: any) => sum + (s.url_count || 0), 0);
-                snapshotResult.data.forEach((s: any) => {
+                type SnapshotRow = { category: string | null; url_count: number | null };
+                const snapshotRows = snapshotResult.data as SnapshotRow[];
+                snapshotLinks = snapshotRows.reduce(
+                    (sum, s) => sum + (s.url_count || 0),
+                    0,
+                );
+                snapshotRows.forEach((s) => {
                     if (s.category && s.url_count) {
                         snapshotCategories[s.category] = s.url_count;
                     }
@@ -447,7 +452,7 @@ async function getDayDetails(date: string) {
     // GitHub Actionsの実行情報を取得
     const githubRuns = await fetchGitHubActionsRuns();
     // JST日付でGitHub Actionsの実行を検索（UTC時刻をJSTに変換）
-    const githubRunForDay = githubRuns.find((run: any) => {
+    const githubRunForDay = githubRuns.find((run: GithubWorkflowRun) => {
         const jstDateStr = utcToJSTDate(run.run_started_at || run.created_at);
         return jstDateStr === date;
     });

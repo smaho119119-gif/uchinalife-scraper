@@ -13,7 +13,16 @@ export async function GET(request: Request) {
         }
 
         // Supabaseから該当物件の画像のみを取得
-        let formattedImages: any[] = [];
+        interface FormattedImage {
+            id: number;
+            url: string;
+            mode: string;
+            style: string;
+            size: string;
+            aspectRatio: string;
+            timestamp: number;
+        }
+        let formattedImages: FormattedImage[] = [];
         
         try {
             const images = await getGeneratedImages(propertyUrl);

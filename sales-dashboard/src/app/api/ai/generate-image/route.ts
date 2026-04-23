@@ -154,7 +154,7 @@ export async function POST(request: Request) {
 
         // Create Data URL
         // Default to png if mimeType not provided
-        const mimeType = (result as any).mimeType || 'image/png';
+        const mimeType = (result as { mimeType?: string }).mimeType || 'image/png';
         const base64Image = result.imageData;
         const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
