@@ -55,7 +55,8 @@ function buildCsp(nonce: string): string {
     // script-src:
     //   - 'strict-dynamic' + nonce: trusted scripts only (modern browsers)
     //   - 'unsafe-inline' kept as legacy fallback (ignored when strict-dynamic
-    //     is honored)
+    //     is honored). Removing it requires emitting <Script nonce={...}>
+    //     for every Next.js bootstrap script first — tracked in docs/todo.md.
     //   - 'unsafe-eval' only in dev for HMR / React DevTools
     // style-src:
     //   - 'unsafe-inline' stays — React style props + Tailwind require it
@@ -63,6 +64,29 @@ function buildCsp(nonce: string): string {
         ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' 'unsafe-eval' https:`
         : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' https:`;
 
+    return [
+        "default-src 'self'",
+        scriptSrc,
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data:",
+        "connect-src 'self' https://*.supabase.co https://api.github.com https://generativelanguage.googleapis.com https://api.openai.com",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+        "upgrade-insecure-requests",
+    ].join('; ');
+}
+
+/**
+ * Stricter CSP shipped as report-only so we can observe violations before
+ * enforcing it. Drops 'unsafe-inline' from script-src entirely; once we
+ * confirm there are no violations from real traffic, this becomes the
+ * enforced policy and the reporting variant disappears.
+ */
+function buildCspReportOnly(nonce: string): string {
+    const scriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https:`;
     return [
         "default-src 'self'",
         scriptSrc,
@@ -92,6 +116,11 @@ function applySecurityHeaders(res: NextResponseType, nonce: string): NextRespons
     );
     res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
     res.headers.set('Content-Security-Policy', buildCsp(nonce));
+    // Ship the next-gen policy as report-only so we can spot regressions
+    // (e.g. a third-party inline script we forgot to nonce) before flipping
+    // it to enforcement. Browsers without the report-uri/report-to wired up
+    // simply log violations to the console — that's enough for this stage.
+    res.headers.set('Content-Security-Policy-Report-Only', buildCspReportOnly(nonce));
     return res;
 }
 
