@@ -14,8 +14,8 @@ interface Property {
     created_at: string;
     updated_at: string;
     is_active: boolean;
-    property_data?: any;
-    details?: any;
+    property_data?: Record<string, unknown> | null;
+    details?: Record<string, unknown> | null;
 }
 
 interface PropertyModalProps {

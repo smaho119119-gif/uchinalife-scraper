@@ -15,6 +15,24 @@ const GITHUB_WORKFLOW_FILE = 'property-scraper.yml';
 
 // キャッシュ（10分間有効）
 const calendarCache: Map<string, { data: unknown; timestamp: number }> = new Map();
+
+interface GithubWorkflowRun {
+    id: number;
+    run_number: number;
+    name: string;
+    status: string;
+    conclusion: string | null;
+    created_at: string;
+    updated_at: string;
+    run_started_at?: string;
+    html_url: string;
+}
+
+interface DailyLinkSnapshot {
+    snapshot_date: string;
+    url_count: number | null;
+    category?: string | null;
+}
 const CACHE_DURATION = 10 * 60 * 1000; // 10分
 
 interface DayStats {
@@ -235,7 +253,7 @@ async function getMonthCalendar(year: number, month: number) {
 
     // GitHub Actionsの実行をJST日付でグループ化（UTC時刻をJSTに変換）
     const githubRunsByDate: Record<string, any[]> = {};
-    githubRuns.forEach((run: any) => {
+    githubRuns.forEach((run: GithubWorkflowRun) => {
         // UTC時刻をJST日付に変換
         const jstDateStr = utcToJSTDate(run.run_started_at || run.created_at);
         const dateKey = jstDateStr.replace(/-/g, '');
@@ -261,7 +279,7 @@ async function getMonthCalendar(year: number, month: number) {
 
             // 日付ごとにグループ化
             if (snapshots) {
-                snapshots.forEach((s: any) => {
+                snapshots.forEach((s: DailyLinkSnapshot) => {
                     const dateStr = s.snapshot_date;
                     if (!snapshotsByDate[dateStr]) {
                         snapshotsByDate[dateStr] = { totalLinks: 0, categories: {} };

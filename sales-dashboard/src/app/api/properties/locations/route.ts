@@ -6,7 +6,8 @@ import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 // Cache for 5 minutes
-let cachedData: { markers: any[], timestamp: number } | null = null;
+interface MarkerCacheRecord { markers: unknown[]; timestamp: number }
+let cachedData: MarkerCacheRecord | null = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export async function GET(request: Request) {
@@ -37,7 +38,17 @@ export async function GET(request: Request) {
         }
 
         // Extract location information and create map markers
-        const markers = (properties || []).map((prop: any) => {
+        type RawProperty = {
+            id: number;
+            url: string;
+            title: string;
+            category: string;
+            category_type: string;
+            genre_name_ja: string;
+            property_data: unknown;
+            images: unknown;
+        };
+        const markers = ((properties as RawProperty[] | null) ?? []).map((prop) => {
             const data = safeParseJson(prop.property_data);
             const images = safeParseJson<unknown[]>(prop.images, []);
 
