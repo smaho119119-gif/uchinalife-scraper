@@ -1,42 +1,60 @@
 # Change Log
 
-## 2026-04-23 — Round 7 (image prompt helpers, role-aware Supabase, staff_photos RLS, CSP nonce)
+## 2026-04-23 — Round 8 (proposal templates split, csp helper, mobile/contrast polish, scraper plan)
 
-### 画像プロンプト helper 抽出 (R7-1 partial)
-- `src/prompts/property-fields.ts` を新設: `extractPropertyDetails` / `buildPropertyHighlights`
-- `src/lib/ai.ts`: `generatePropertyImageWithPhotos` 内のフィールド抽出と highlights を helper に置換 (1165 → 1139 行)
-- 巨大な `proposal_*` テンプレ群は AI 出力比較が必要なため Round 8 へ持ち越し（todo に明記）
+### proposal_* 画像 prompt builders (R8-1)
+- `src/prompts/property-image.ts` を新設
+  - `buildProposalImagePrompt({ template, propertyDetails, propertyImageCount, hasStaffPhoto, aspectRatio })`
+  - 4 つの layout helper (card / compare / flow / grid) と staff / multi-image 指示を分離
+  - `parseProposalTemplate(template)` で型安全な分岐
+- `src/lib/ai.ts`: 235 行のインラインテンプレを 13 行の builder 呼び出しに圧縮 (1139 → **921 行** / -19%)
+- 出力文字列はバイト一致で維持 → AI 生成結果は不変
 
-### Supabase role selector (R7-4)
-- `src/lib/supabase-server.ts`: `getSupabase('anon' | 'service' | 'auto')` に拡張、role ごとにクライアントをキャッシュ
-- 公開 read 系 API 10 本を `'anon'` に切り替え
-- admin API 2 本 (`admin/stats`, `admin/calendar`) を `'service'` に明示
-- 既存 `getSupabase()` は `'auto'` (旧挙動) を維持
+### CSP nonce helper (R8-3)
+- `src/lib/csp.ts`: `getCspNonce()` で middleware が設定した `x-nonce` を RSC から取得
+- 将来 `<Script nonce={await getCspNonce()} />` 配備 → 完全な `'unsafe-inline'` 撤廃の準備
 
-### Supabase RLS 適用 (R7-2 / R7-3)
-- 新規: `staff_photos` テーブル + index + RLS + `anon SELECT only / service ALL` ポリシー（テーブルが存在せずサイレント失敗していた問題の解消）
-- `uchina_property_images`: RLS 有効化 + `anon SELECT only / service ALL` ポリシー（誰でも書換可だった脆弱性を是正）
-- `properties` の anon write 削除はスクレイパ側の env 整理が必要なため Round 8 以降
+### モバイル / コントラスト
+- `app/sales/proposal/page.tsx`: スマホで `p-8` → `p-4 sm:p-8`、`-m-8` → `-m-4 sm:-m-8`
+- `components/ui/button.tsx`: disabled 状態に `saturate-50` + opacity 60 で「死んで見える」明確化
 
-### CSP nonce + strict-dynamic (R7-5)
-- middleware で per-request nonce を生成し `x-nonce` リクエストヘッダで RSC に伝搬
-- `script-src` に `'nonce-...' 'strict-dynamic' https:` を追加（modern browsers では `'unsafe-inline'` を無視、レガシーは fallback）
-- `'unsafe-inline'` はレガシーブラウザ用 fallback として残置、将来 `<Script nonce>` 実装後に削除
-
-### モバイル微調整 (R7-6)
-- admin タブを `overflow-x-auto` 化（スマホで横スクロール、md+ で wrap）
+### スクレイパ移行計画 (R8-2)
+- `docs/scraper-migration.md` を新設
+  - Phase 1: GitHub Actions に service_role key 追加（fallback 維持）
+  - Phase 2: anon fallback 削除
+  - Phase 3: `properties` の anon write ポリシー DROP
+  - Phase 4: 動作確認 + ロールバック手順
+- ダッシュボード側の変更は不要（Round 7 で role 切替済み）
 
 ### 副作用チェック
 - `npx tsc --noEmit` → 0 errors
 - `npx next build` → 全ルート生成成功
-- DB 変更:
-  - `staff_photos` 新規作成 ✅
-  - `uchina_property_images` RLS 有効化 ✅（service_role はバイパス、anon は read のみで現行挙動維持）
+- 公開 API レスポンスシェイプ維持
 
 ---
 
-## 2026-04-23 — Round 6 (prompts split, market-price hook, RLS audit, CSP hardening)
-（既存の通り維持）
+## 2026-04-23 — Round 7 (role-aware Supabase, RLS hardening, CSP nonce, prompt helpers)
 
-## 2026-04-23 — Round 5 — Round 4 — Round 3 — Round 2 — Round 1
-（前ラウンドの記述を保持）
+### 画像プロンプト helper 抽出 (R7-1 partial)
+- `src/prompts/property-fields.ts` を新設: `extractPropertyDetails` / `buildPropertyHighlights`
+- `src/lib/ai.ts`: 1165 → 1139 行
+
+### Supabase role selector (R7-4)
+- `getSupabase('anon' | 'service' | 'auto')` に拡張
+- 公開 read 系 API 10 本を `'anon'` に / admin 2 本を `'service'` に明示
+
+### Supabase RLS 適用 (R7-2 / R7-3)
+- 新規: `staff_photos` テーブル + RLS
+- `uchina_property_images`: RLS 有効化 + 同様のポリシー
+
+### CSP nonce + strict-dynamic (R7-5)
+- middleware で per-request nonce 生成 + `x-nonce` 伝搬
+- `script-src` に nonce + `'strict-dynamic'` 追加
+
+### モバイル微調整 (R7-6)
+- admin タブ overflow-x-auto
+
+---
+
+## 2026-04-23 — Round 6 / 5 / 4 / 3 / 2 / 1
+（前ラウンドの記述を保持。詳細は git log 参照）

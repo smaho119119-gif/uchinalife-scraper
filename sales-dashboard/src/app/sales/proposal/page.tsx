@@ -56,9 +56,9 @@ export default function ProposalPage() {
   };
 
   return (
-    <div className="flex-1 p-8 pt-6 min-h-screen">
+    <div className="flex-1 p-4 sm:p-8 pt-6 min-h-screen">
       {mode === "build" && (
-        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 min-h-full -m-8 -mt-6 p-8 pt-6">
+        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 min-h-full -m-4 sm:-m-8 -mt-6 p-4 sm:p-8 pt-6">
           {/* Header */}
           <div className="mb-6">
             <h2 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
