@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1264,9 +1265,11 @@ export default function AdminPage() {
                                                             });
                                                             const data = await res.json();
                                                             if (data.error) {
-                                                                alert(`エラー: ${data.error}`);
+                                                                toast.error(`エラー: ${data.error}`);
                                                             } else {
-                                                                alert('スクレイピングを開始しました。数分後に結果を確認してください。\n\n※全件スクレイピングを実行しますが、重複データは自動的に更新されます。');
+                                                                toast.success('スクレイピングを開始しました', {
+                                                                    description: '数分後に結果を確認してください。重複データは自動的に更新されます。',
+                                                                });
                                                                 // 3秒後に進捗を更新
                                                                 setTimeout(() => {
                                                                     fetchScrapingStatus();
@@ -1275,7 +1278,7 @@ export default function AdminPage() {
                                                             }
                                                         } catch (error) {
                                                             console.error('再実行エラー:', error);
-                                                            alert('再実行に失敗しました');
+                                                            toast.error('再実行に失敗しました');
                                                         } finally {
                                                             setIsExecuting(false);
                                                         }

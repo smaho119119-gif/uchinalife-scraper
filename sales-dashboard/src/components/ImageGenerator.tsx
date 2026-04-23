@@ -95,7 +95,7 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
 
     const handleGenerateImage = async () => {
         if (selectedPropertyImages.length === 0) {
-            alert("物件画像を最低1枚選択してください");
+            toast.warning('物件画像を最低1枚選択してください');
             return;
         }
 
@@ -158,13 +158,13 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                 });
             } else if (data.error) {
                 console.error('API Error:', data.error);
-                alert(`画像生成エラー: ${data.error}`);
+                toast.error(`画像生成エラー: ${data.error}`);
             } else {
                 console.warn('No imageUrl in response:', data);
             }
         } catch (e) {
             console.error(e);
-            alert("画像生成に失敗しました");
+            toast.error('画像生成に失敗しました');
         } finally {
             clearInterval(timerInterval);
             setGeneratingImage(false);
