@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useReducer, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,6 @@ import {
     REGIONS,
     SUMAHO119_STORES,
     MAP_CATEGORIES,
-    DEFAULT_MAP_CENTER,
-    DEFAULT_MAP_ZOOM,
-    type SumahoStore,
 } from '@/lib/map-config';
 import {
     useMapMarkers,
@@ -22,6 +19,10 @@ import {
     readMapSession,
     useMapSessionPersistence,
 } from '@/lib/use-map-session';
+import {
+    createInitialMapState,
+    mapReducer,
+} from '@/lib/map-reducer';
 
 interface StoreLocation {
     name: string;
@@ -60,14 +61,25 @@ interface InteractiveMapProps {
     fullPage?: boolean;
 }
 
-/** Snapshot-once initial state from sessionStorage so SSR + initial CSR agree. */
+/** Snapshot once on first render so SSR + initial CSR agree. */
 const INITIAL_SESSION =
     typeof window !== 'undefined' ? readMapSession() : null;
 
 export default function InteractiveMap({ filters, fullPage = false }: InteractiveMapProps) {
     const router = useRouter();
 
-    // Markers + remote-island filtering + cache lives in the hook.
+    const [state, dispatch] = useReducer(
+        mapReducer,
+        createInitialMapState({
+            selectedRegion: INITIAL_SESSION?.selectedRegion,
+            selectedStores: INITIAL_SESSION?.selectedStores,
+            selectedStoreId: INITIAL_SESSION?.selectedStoreId,
+            selectedPropertyId: INITIAL_SESSION?.selectedPropertyId,
+            mapCenter: INITIAL_SESSION?.mapCenter,
+            mapZoom: INITIAL_SESSION?.mapZoom,
+        }),
+    );
+
     const {
         markers: allMarkers,
         loading,
@@ -75,198 +87,52 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
         refetch,
     } = useMapMarkers();
 
-    // UI selection state (kept local; reducer migration deferred to Round 5).
-    const [markers, setMarkers] = useState<PropertyMarker[]>([]);
-    const [isNavigating, setIsNavigating] = useState(false);
-    const [selectedProperty, setSelectedProperty] = useState<PropertyMarker | null>(null);
-    const [selectedStore, setSelectedStore] = useState<SumahoStore | null>(() => {
-        if (INITIAL_SESSION?.selectedStoreId) {
-            return SUMAHO119_STORES.find((s) => s.id === INITIAL_SESSION.selectedStoreId) ?? null;
-        }
-        return null;
-    });
-    const [selectedRegion, setSelectedRegion] = useState<string>(
-        () => INITIAL_SESSION?.selectedRegion ?? '',
-    );
-    const [selectedStores, setSelectedStores] = useState<string[]>(
-        () => INITIAL_SESSION?.selectedStores ?? [],
-    );
-    const [mapCenter, setMapCenter] = useState<[number, number] | undefined>(
-        () => INITIAL_SESSION?.mapCenter,
-    );
-    const [mapZoom, setMapZoom] = useState<number | undefined>(
-        () => INITIAL_SESSION?.mapZoom,
-    );
-    const [pendingPropertyId, setPendingPropertyId] = useState<number | null>(
-        () => INITIAL_SESSION?.selectedPropertyId ?? null,
-    );
-
-    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const [showOnlyActive, setShowOnlyActive] = useState(true);
-
-    // Persist relevant slice to sessionStorage (debounced).
+    // Persist relevant slice (debounced).
     useMapSessionPersistence(
         useMemo(
             () => ({
-                selectedRegion,
-                selectedStores,
-                selectedStoreId: selectedStore?.id,
-                selectedPropertyId: selectedProperty?.id,
-                mapCenter,
-                mapZoom,
+                selectedRegion: state.selectedRegion,
+                selectedStores: state.selectedStores,
+                selectedStoreId: state.selectedStore?.id,
+                selectedPropertyId: state.selectedProperty?.id,
+                mapCenter: state.mapCenter,
+                mapZoom: state.mapZoom,
             }),
-            [selectedRegion, selectedStores, selectedStore, selectedProperty, mapCenter, mapZoom],
+            [
+                state.selectedRegion,
+                state.selectedStores,
+                state.selectedStore,
+                state.selectedProperty,
+                state.mapCenter,
+                state.mapZoom,
+            ],
         ),
     );
 
     // Apply restored region + pending property once data lands.
     useEffect(() => {
-        if (loading || allMarkers.length === 0) return;
-
-        if (selectedRegion) {
-            if (selectedRegion === '沖縄本島') {
-                setMarkers(allMarkers);
-            } else {
-                const region = REGIONS.find((r) => r.name === selectedRegion);
-                if (region && region.cities.length > 0) {
-                    setMarkers(
-                        allMarkers.filter((m) =>
-                            region.cities.some((city) => m.city.includes(city)),
-                        ),
-                    );
-                }
-            }
+        if (!loading && allMarkers.length > 0) {
+            dispatch({ type: 'HYDRATE_FROM_DATA', allMarkers });
         }
+    }, [loading, allMarkers]);
 
-        if (pendingPropertyId) {
-            const property = allMarkers.find((m) => m.id === pendingPropertyId);
-            if (property) {
-                setSelectedProperty(property);
-                setSelectedStore(null);
-            }
-            setPendingPropertyId(null);
-        }
-    }, [loading, allMarkers, selectedRegion, pendingPropertyId]);
-
-    const handleRegionSelect = (regionName: string) => {
-        if (selectedRegion === regionName) {
-            setSelectedRegion('');
-            setSelectedStores([]);
-            setMarkers([]);
-            setMapCenter(DEFAULT_MAP_CENTER);
-            setMapZoom(DEFAULT_MAP_ZOOM);
-            return;
-        }
-
-        setSelectedRegion(regionName);
-        setSelectedStores([]);
-
-        const region = REGIONS.find((r) => r.name === regionName);
-        if (region) {
-            setMapCenter(region.center);
-            setMapZoom(region.zoom);
-        }
-
-        if (regionName === '沖縄本島' || regionName === '') {
-            setMarkers(allMarkers);
-        } else if (region && region.cities.length > 0) {
-            setMarkers(
-                allMarkers.filter((m) =>
-                    region.cities.some((city) => m.city.includes(city)),
-                ),
-            );
-        }
-    };
-
-    const clearRegion = () => {
-        setSelectedRegion('');
-        setSelectedStores([]);
-        setMarkers([]);
-        setMapCenter(DEFAULT_MAP_CENTER);
-        setMapZoom(DEFAULT_MAP_ZOOM);
-    };
-
-    const fitBoundsToStores = (storeIds: string[]) => {
-        const stores = storeIds
-            .map((id) => SUMAHO119_STORES.find((s) => s.id === id))
-            .filter((s): s is SumahoStore => Boolean(s));
-        if (stores.length === 0) return;
-
-        if (stores.length === 1) {
-            setMapCenter(stores[0].coordinates);
-            setMapZoom(14);
-            return;
-        }
-        const lats = stores.map((s) => s.coordinates[0]);
-        const lngs = stores.map((s) => s.coordinates[1]);
-        const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-        const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-        const maxDiff = Math.max(
-            Math.max(...lats) - Math.min(...lats),
-            Math.max(...lngs) - Math.min(...lngs),
-        );
-        let zoom = 10;
-        if (maxDiff < 0.05) zoom = 14;
-        else if (maxDiff < 0.1) zoom = 13;
-        else if (maxDiff < 0.2) zoom = 12;
-        else if (maxDiff < 0.5) zoom = 11;
-        setMapCenter([centerLat, centerLng]);
-        setMapZoom(zoom);
-    };
-
-    const toggleStore = (storeId: string) => {
-        const store = SUMAHO119_STORES.find((s) => s.id === storeId) ?? null;
-        const isCurrentlySelected = selectedStores.includes(storeId);
-
-        const next = isCurrentlySelected
-            ? selectedStores.filter((id) => id !== storeId)
-            : [...selectedStores, storeId];
-
-        if (isCurrentlySelected) {
-            if (next.length === 0) {
-                setSelectedStore(null);
-                setMapCenter(DEFAULT_MAP_CENTER);
-                setMapZoom(DEFAULT_MAP_ZOOM);
-            } else {
-                fitBoundsToStores(next);
-            }
-        } else if (store) {
-            setSelectedStore(store);
-            setSelectedProperty(null);
-            if (next.length === 1) {
-                setMapCenter(store.coordinates);
-                setMapZoom(14);
-            } else {
-                fitBoundsToStores(next);
-            }
-        }
-
-        setSelectedStores(next);
-    };
-
-    const selectAllStores = () => {
-        setSelectedStores(SUMAHO119_STORES.map((s) => s.id));
-        setMapCenter(DEFAULT_MAP_CENTER);
-        setMapZoom(DEFAULT_MAP_ZOOM);
-    };
+    const handleRegionSelect = useCallback(
+        (regionName: string) => {
+            dispatch({ type: 'SELECT_REGION', region: regionName, allMarkers });
+        },
+        [allMarkers],
+    );
 
     const handleStoreClick = useCallback((storeName: string) => {
-        const store = SUMAHO119_STORES.find((s) => s.name === storeName);
-        if (store) {
-            setSelectedStore(store);
-            setSelectedProperty(null);
-        }
+        dispatch({ type: 'SELECT_STORE_BY_NAME', name: storeName });
     }, []);
 
     const handlePropertyClick = useCallback(
         (marker: PropertyMarker) => {
-            setSelectedProperty(marker);
-            setSelectedStore(null);
-
+            dispatch({ type: 'SELECT_PROPERTY', marker });
             if (marker.url) {
                 const encodedUrl = encodeURIComponent(marker.url);
-                const detailPath = `/properties/${encodedUrl}`;
-                router.prefetch(detailPath);
+                router.prefetch(`/properties/${encodedUrl}`);
                 fetch(`/api/properties/${encodedUrl}`, { cache: 'force-cache' }).catch(() => {});
                 fetch('/api/ai/history', {
                     method: 'POST',
@@ -280,12 +146,12 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
     );
 
     const filteredMarkers = useMemo(() => {
-        return markers.filter((marker) => {
+        return state.markers.filter((marker) => {
             if (filters?.category && marker.category !== filters.category) return false;
             if (filters?.categoryType && marker.categoryType !== filters.categoryType) return false;
 
-            if (selectedCategories.length > 0) {
-                const matches = selectedCategories.some((catId) => {
+            if (state.selectedCategories.length > 0) {
+                const matches = state.selectedCategories.some((catId) => {
                     const cat = MAP_CATEGORIES.find((c) => c.id === catId);
                     if (!cat) return false;
                     if (cat.type === '賃貸') return marker.categoryType === '賃貸';
@@ -298,17 +164,11 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
             }
             return true;
         });
-    }, [markers, filters?.category, filters?.categoryType, selectedCategories]);
-
-    const toggleCategory = (catId: string) => {
-        setSelectedCategories((prev) =>
-            prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId],
-        );
-    };
+    }, [state.markers, filters?.category, filters?.categoryType, state.selectedCategories]);
 
     const selectedStoreLocations = useMemo(
-        () => SUMAHO119_STORES.filter((store) => selectedStores.includes(store.id)),
-        [selectedStores],
+        () => SUMAHO119_STORES.filter((store) => state.selectedStores.includes(store.id)),
+        [state.selectedStores],
     );
 
     const containerHeight = fullPage ? 'h-[calc(100vh-100px)]' : 'h-[500px]';
@@ -321,10 +181,10 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                 <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-700 flex-shrink-0">
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400">🏷️ カテゴリ</span>
-                        {selectedCategories.length > 0 && (
+                        {state.selectedCategories.length > 0 && (
                             <button
                                 type="button"
-                                onClick={() => setSelectedCategories([])}
+                                onClick={() => dispatch({ type: 'CLEAR_CATEGORIES' })}
                                 className="text-xs text-rose-500 hover:text-rose-600"
                                 aria-label="カテゴリ選択を全て解除"
                             >
@@ -337,12 +197,12 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                             <button
                                 type="button"
                                 key={cat.id}
-                                onClick={() => toggleCategory(cat.id)}
-                                aria-pressed={selectedCategories.includes(cat.id)}
+                                onClick={() => dispatch({ type: 'TOGGLE_CATEGORY', categoryId: cat.id })}
+                                aria-pressed={state.selectedCategories.includes(cat.id)}
                                 className={`text-[10px] px-1.5 py-1 rounded border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-                                    selectedCategories.includes(cat.id)
+                                    state.selectedCategories.includes(cat.id)
                                         ? 'bg-indigo-500 text-white border-indigo-500'
-                                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-indigo-400'
+                                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-indigo-400'
                                 }`}
                             >
                                 {cat.label.replace('売買', '')}
@@ -353,11 +213,13 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                         <label className="flex items-center gap-1.5 cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={showOnlyActive}
-                                onChange={(e) => setShowOnlyActive(e.target.checked)}
+                                checked={state.showOnlyActive}
+                                onChange={(e) =>
+                                    dispatch({ type: 'SET_SHOW_ONLY_ACTIVE', value: e.target.checked })
+                                }
                                 className="w-3 h-3 rounded border-slate-300 text-indigo-500 focus:ring-indigo-500"
                             />
-                            <span className="text-[10px] text-slate-600 dark:text-slate-400">
+                            <span className="text-[10px] text-slate-600 dark:text-slate-300">
                                 販売中のみ
                             </span>
                         </label>
@@ -375,7 +237,7 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                         <span className="text-xs font-bold text-slate-700 dark:text-slate-300">📍 地域</span>
                         <button
                             type="button"
-                            onClick={clearRegion}
+                            onClick={() => dispatch({ type: 'CLEAR_REGION' })}
                             className="text-xs text-rose-500 hover:text-rose-600"
                             aria-label="地域選択を解除"
                         >
@@ -387,10 +249,10 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                             <Button
                                 key={region.name}
                                 onClick={() => handleRegionSelect(region.name)}
-                                variant={selectedRegion === region.name ? 'default' : 'outline'}
+                                variant={state.selectedRegion === region.name ? 'default' : 'outline'}
                                 size="sm"
                                 className={`h-6 w-full text-xs justify-start px-2 transform-none hover:scale-100 ${
-                                    selectedRegion === region.name
+                                    state.selectedRegion === region.name
                                         ? 'bg-cyan-500 hover:bg-cyan-600'
                                         : 'border-slate-300 dark:border-slate-600'
                                 }`}
@@ -409,7 +271,7 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                         </span>
                         <button
                             type="button"
-                            onClick={selectAllStores}
+                            onClick={() => dispatch({ type: 'SELECT_ALL_STORES' })}
                             className="text-xs text-amber-600 hover:text-amber-700"
                         >
                             全
@@ -419,11 +281,11 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                         {SUMAHO119_STORES.map((store) => (
                             <Button
                                 key={store.id}
-                                onClick={() => toggleStore(store.id)}
-                                variant={selectedStores.includes(store.id) ? 'default' : 'outline'}
+                                onClick={() => dispatch({ type: 'TOGGLE_STORE', storeId: store.id })}
+                                variant={state.selectedStores.includes(store.id) ? 'default' : 'outline'}
                                 size="sm"
                                 className={`h-6 w-full text-xs justify-start px-2 flex-shrink-0 transform-none hover:scale-100 ${
-                                    selectedStores.includes(store.id)
+                                    state.selectedStores.includes(store.id)
                                         ? 'bg-amber-500 hover:bg-amber-600'
                                         : 'border-amber-300 dark:border-amber-600 text-amber-600 dark:text-amber-400'
                                 }`}
@@ -432,16 +294,13 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                             </Button>
                         ))}
                     </div>
-                    {selectedStores.length > 0 && (
+                    {state.selectedStores.length > 0 && (
                         <button
                             type="button"
-                            onClick={() => {
-                                setSelectedStores([]);
-                                setSelectedStore(null);
-                            }}
+                            onClick={() => dispatch({ type: 'CLEAR_STORES' })}
                             className="w-full mt-2 text-xs text-rose-500 hover:text-rose-600 flex-shrink-0 border-t border-amber-200 pt-2"
                         >
-                            ✕ クリア ({selectedStores.length}件)
+                            ✕ クリア ({state.selectedStores.length}件)
                         </button>
                     )}
                 </div>
@@ -457,7 +316,7 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                     <div className="h-full flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
                         <div className="text-center">
                             <Loader2 className="h-8 w-8 animate-spin text-cyan-500 mx-auto mb-2" />
-                            <p className="text-sm text-slate-600 dark:text-slate-400">
+                            <p className="text-sm text-slate-600 dark:text-slate-300">
                                 読み込み中...
                             </p>
                         </div>
@@ -467,10 +326,10 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                         <MapView
                             markers={filteredMarkers}
                             onMarkerClick={handlePropertyClick}
-                            selectedRegion={selectedRegion}
+                            selectedRegion={state.selectedRegion}
                             stores={selectedStoreLocations}
-                            centerCoordinates={mapCenter}
-                            zoomLevel={mapZoom}
+                            centerCoordinates={state.mapCenter}
+                            zoomLevel={state.mapZoom}
                             onStoreClick={handleStoreClick}
                         />
                     </div>
@@ -479,16 +338,16 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
 
             {/* Info Panel */}
             <div className="w-64 flex-shrink-0 h-full">
-                {selectedProperty ? (
+                {state.selectedProperty ? (
                     <div className="h-full overflow-y-auto p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-2 line-clamp-2">
-                            {selectedProperty.title}
+                            {state.selectedProperty.title}
                         </h3>
-                        {selectedProperty.image && (
+                        {state.selectedProperty.image && (
                             <div className="relative w-full h-28 rounded-lg mb-2 bg-slate-200 dark:bg-slate-700 overflow-hidden">
                                 <img
-                                    src={selectedProperty.image}
-                                    alt={selectedProperty.title}
+                                    src={state.selectedProperty.image}
+                                    alt={state.selectedProperty.title}
                                     loading="eager"
                                     decoding="async"
                                     className="w-full h-full object-cover animate-fade-in"
@@ -502,25 +361,25 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                             <div className="flex justify-between">
                                 <span className="text-slate-500 text-xs">カテゴリー</span>
                                 <span className="font-semibold text-slate-900 dark:text-white text-xs">
-                                    {selectedProperty.genreName}
+                                    {state.selectedProperty.genreName}
                                 </span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-500 text-xs">価格</span>
                                 <span className="font-bold text-cyan-600 text-xs">
-                                    {selectedProperty.price}
+                                    {state.selectedProperty.price}
                                 </span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-500 text-xs">タイプ</span>
                                 <span className="font-semibold text-slate-900 dark:text-white text-xs">
-                                    {selectedProperty.categoryType}
+                                    {state.selectedProperty.categoryType}
                                 </span>
                             </div>
                             <div className="pt-1.5 border-t border-slate-200 dark:border-slate-600">
                                 <span className="text-slate-500 text-xs">所在地</span>
                                 <p className="text-slate-900 dark:text-white font-medium text-xs mt-0.5">
-                                    {selectedProperty.location}
+                                    {state.selectedProperty.location}
                                 </p>
                             </div>
                         </div>
@@ -528,31 +387,31 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                         <button
                             type="button"
                             onClick={() => {
-                                setIsNavigating(true);
+                                dispatch({ type: 'SET_NAVIGATING', value: true });
                                 router.push(
-                                    `/properties/${encodeURIComponent(selectedProperty.url)}`,
+                                    `/properties/${encodeURIComponent(state.selectedProperty!.url)}`,
                                 );
                             }}
                             onMouseEnter={() => {
-                                const path = `/properties/${encodeURIComponent(selectedProperty.url)}`;
+                                const path = `/properties/${encodeURIComponent(state.selectedProperty!.url)}`;
                                 router.prefetch(path);
-                                fetch(`/api/properties/${encodeURIComponent(selectedProperty.url)}`, {
+                                fetch(`/api/properties/${encodeURIComponent(state.selectedProperty!.url)}`, {
                                     cache: 'force-cache',
                                 }).catch(() => {});
                             }}
                             onTouchStart={() => {
-                                const path = `/properties/${encodeURIComponent(selectedProperty.url)}`;
+                                const path = `/properties/${encodeURIComponent(state.selectedProperty!.url)}`;
                                 router.prefetch(path);
                             }}
-                            disabled={isNavigating}
-                            aria-label={`${selectedProperty.title} の詳細を開く`}
+                            disabled={state.isNavigating}
+                            aria-label={`${state.selectedProperty.title} の詳細を開く`}
                             className={`mt-3 w-full flex items-center justify-center gap-2 text-white font-bold py-2 px-3 rounded-lg transition-colors text-sm cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${
-                                isNavigating
+                                state.isNavigating
                                     ? 'bg-cyan-400 cursor-wait'
                                     : 'bg-cyan-500 hover:bg-cyan-600'
                             }`}
                         >
-                            {isNavigating ? (
+                            {state.isNavigating ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     読み込み中...
@@ -562,26 +421,26 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                             )}
                         </button>
                     </div>
-                ) : selectedStore ? (
+                ) : state.selectedStore ? (
                     <div className="h-full overflow-y-auto p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg border border-amber-200 dark:border-amber-700">
                         <div className="relative w-full h-32 rounded-lg overflow-hidden border-2 border-amber-300 mb-3">
                             <iframe
-                                title={`${selectedStore.name}の地図`}
+                                title={`${state.selectedStore.name}の地図`}
                                 width="100%"
                                 height="100%"
                                 style={{ border: 0 }}
                                 loading="lazy"
-                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${selectedStore.coordinates[1] - 0.005}%2C${selectedStore.coordinates[0] - 0.003}%2C${selectedStore.coordinates[1] + 0.005}%2C${selectedStore.coordinates[0] + 0.003}&layer=mapnik&marker=${selectedStore.coordinates[0]}%2C${selectedStore.coordinates[1]}`}
+                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${state.selectedStore.coordinates[1] - 0.005}%2C${state.selectedStore.coordinates[0] - 0.003}%2C${state.selectedStore.coordinates[1] + 0.005}%2C${state.selectedStore.coordinates[0] + 0.003}&layer=mapnik&marker=${state.selectedStore.coordinates[0]}%2C${state.selectedStore.coordinates[1]}`}
                             />
                             <div className="absolute bottom-1 right-1 bg-amber-500 text-white text-xs px-2 py-0.5 rounded font-bold">
-                                📍 {selectedStore.name}
+                                📍 {state.selectedStore.name}
                             </div>
                         </div>
 
                         <div className="text-center mb-3">
                             <h3 className="text-base font-bold text-amber-700 dark:text-amber-400">
-                                📱 スマホ119 {selectedStore.name}
-                                {selectedStore.subtitle}
+                                📱 スマホ119 {state.selectedStore.name}
+                                {state.selectedStore.subtitle}
                             </h3>
                         </div>
 
@@ -589,7 +448,7 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                             <div className="bg-white dark:bg-slate-800 rounded p-2">
                                 <span className="text-amber-600 text-xs font-bold">📍 住所</span>
                                 <p className="text-slate-900 dark:text-white mt-1 text-xs">
-                                    {selectedStore.address}
+                                    {state.selectedStore.address}
                                 </p>
                             </div>
                             <div className="bg-white dark:bg-slate-800 rounded p-2">
@@ -603,7 +462,7 @@ export default function InteractiveMap({ filters, fullPage = false }: Interactiv
                         </div>
 
                         <a
-                            href={selectedStore.googleMapsUrl}
+                            href={state.selectedStore.googleMapsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="mt-3 w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"

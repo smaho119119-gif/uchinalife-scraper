@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
+import { getStyleDescription } from "@/lib/ai-styles";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
@@ -55,39 +56,7 @@ export const AI_MODELS = {
 export type ImageModelKey = keyof typeof AI_MODELS.image;
 export type TextModelKey = keyof typeof AI_MODELS.text;
 
-// ============================================
-// ヘルパー関数
-// ============================================
-function getStyleDescription(style: string) {
-    switch (style) {
-        case 'luxury':
-            return 'elegant gold and black with premium textures';
-        case 'modern':
-            return 'clean white and blue with minimalist design';
-        case 'classic':
-            return 'warm beige and brown with traditional elegance';
-        case 'minimal':
-            return 'monochrome with lots of white space';
-        case 'handdrawn':
-            return 'colorful hand-drawn illustration style with playful sketchy lines and vibrant colors';
-        case '3d':
-            return 'photorealistic 3D rendering with depth, shadows, and modern CGI aesthetic';
-        case 'watercolor':
-            return 'soft watercolor painting style with gentle color blends and artistic brush strokes';
-        case 'neon':
-            return 'vibrant neon colors with glowing effects, cyberpunk aesthetic, and electric atmosphere';
-        case 'vintage':
-            return 'retro vintage style with aged paper texture, sepia tones, and classic typography';
-        case 'futuristic':
-            return 'sleek futuristic design with metallic elements, holographic effects, and sci-fi aesthetic';
-        case 'business':
-            return 'professional Japanese business presentation style with clean infographics, charts, and structured layout';
-        case 'anime':
-            return 'Japanese anime illustration style with vibrant colors and expressive characters';
-        default:
-            return 'warm neutral tones';
-    }
-}
+// Style description helper lives in lib/ai-styles.ts (lookup table).
 
 // ============================================
 // テキスト生成（セールスコピー）

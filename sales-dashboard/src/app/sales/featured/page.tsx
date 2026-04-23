@@ -50,7 +50,7 @@ export default function FeaturedPage() {
       <div>
         <Link
           href="/sales/market-price"
-          className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-200 transition-colors mb-4"
+          className="inline-flex items-center gap-1 text-sm text-slate-300 hover:text-slate-200 transition-colors mb-4"
         >
           <ChevronLeft className="h-4 w-4" />
           ダッシュボードに戻る
@@ -58,7 +58,7 @@ export default function FeaturedPage() {
         <h1 className="text-3xl font-bold tracking-tight text-white">
           特集コレクション
         </h1>
-        <p className="text-slate-400 mt-1">
+        <p className="text-slate-300 mt-1">
           条件別に厳選された物件をまとめて閲覧できます
         </p>
       </div>
@@ -84,7 +84,7 @@ export default function FeaturedPage() {
                 <h2 className="text-xl font-bold text-white mb-1 group-hover:text-emerald-300 transition-colors">
                   {col.title}
                 </h2>
-                <p className="text-sm text-slate-400 leading-relaxed">
+                <p className="text-sm text-slate-300 leading-relaxed">
                   {col.description}
                 </p>
 

@@ -92,7 +92,7 @@ export default function AreaAnalysisPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white">エリア分析</h1>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-300 mt-0.5">
                   沖縄本島の不動産マーケット俯瞰マップ
                 </p>
               </div>
@@ -112,7 +112,7 @@ export default function AreaAnalysisPage() {
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                       typeFilter === tab.id
                         ? "bg-emerald-600 text-white"
-                        : "text-slate-400 hover:text-white"
+                        : "text-slate-300 hover:text-white"
                     }`}
                   >
                     {tab.label}
@@ -131,7 +131,7 @@ export default function AreaAnalysisPage() {
                       className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                         colorMode === mode.id
                           ? "bg-slate-600 text-white"
-                          : "text-slate-400 hover:text-white"
+                          : "text-slate-300 hover:text-white"
                       }`}
                     >
                       <Icon className="h-3 w-3" />
@@ -161,7 +161,7 @@ export default function AreaAnalysisPage() {
               <div className="h-full flex items-center justify-center bg-slate-900 rounded-xl border border-slate-700">
                 <div className="text-center">
                   <Loader2 className="h-8 w-8 animate-spin text-emerald-400 mx-auto mb-3" />
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-slate-300">
                     エリアデータを取得中...
                   </p>
                 </div>

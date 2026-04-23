@@ -309,7 +309,7 @@ export default function PropertiesPage() {
             <div className="flex items-center justify-between">
                 <div>
                 <h2 className="text-3xl font-bold tracking-tight text-white">物件一覧</h2>
-                    <p className="text-slate-400 mt-1">
+                    <p className="text-slate-300 mt-1">
                         全 {properties.length.toLocaleString()} 件中 {stats.total.toLocaleString()} 件ヒット
                         {selectedCategories.length > 0 && ` (${selectedCategories.length}カテゴリ選択)`}
                     </p>
@@ -437,7 +437,7 @@ export default function PropertiesPage() {
                                     onClick={() => setPriceFilterEnabled(!priceFilterEnabled)}
                                     className={priceFilterEnabled
                                         ? 'bg-emerald-600 text-white border-emerald-500 text-xs px-2 py-1 h-7'
-                                        : 'bg-slate-800/50 border-slate-700 text-slate-400 text-xs px-2 py-1 h-7'}
+                                        : 'bg-slate-800/50 border-slate-700 text-slate-300 text-xs px-2 py-1 h-7'}
                                 >
                                     {priceFilterEnabled ? 'ON' : 'OFF'}
                                 </Button>
@@ -500,7 +500,7 @@ export default function PropertiesPage() {
                                                 onClick={() => setPriceRange([preset.min, preset.max])}
                                                 className={priceRange[0] === preset.min && priceRange[1] === preset.max
                                                     ? 'bg-emerald-600 text-white border-emerald-500 text-xs px-2 py-1 h-6'
-                                                    : 'bg-slate-800/50 border-slate-700 text-slate-400 text-xs px-2 py-1 h-6 hover:bg-emerald-900/30'}
+                                                    : 'bg-slate-800/50 border-slate-700 text-slate-300 text-xs px-2 py-1 h-6 hover:bg-emerald-900/30'}
                                             >
                                                 {preset.label}
                                             </Button>
@@ -512,7 +512,7 @@ export default function PropertiesPage() {
 
                         {/* テキスト検索 */}
                         <div className="relative pt-3 border-t border-slate-800">
-                            <Search className="absolute left-3 top-1/2 mt-1.5 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                            <Search className="absolute left-3 top-1/2 mt-1.5 transform -translate-y-1/2 h-5 w-5 text-slate-300" />
                 <Input
                     type="text"
                                 placeholder="物件名、会社名、エリアなどで検索..."
@@ -546,7 +546,7 @@ export default function PropertiesPage() {
                             className={`h-7 px-2 text-xs ${
                                 itemsPerPage === size
                                     ? 'bg-emerald-600 text-white border-emerald-500'
-                                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700'
+                                    : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700'
                             }`}
                         >
                             {size}
@@ -563,7 +563,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(1)}
                         disabled={currentPage === 1}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsLeft className="h-4 w-4" />
                     </Button>
@@ -572,7 +572,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -587,7 +587,7 @@ export default function PropertiesPage() {
                                 className={`h-10 min-w-[40px] px-3 text-sm ${
                                     currentPage === page
                                         ? 'bg-emerald-600 text-white border-emerald-500'
-                                        : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700'
+                                        : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700'
                                 }`}
                             >
                                 {page}
@@ -602,7 +602,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -611,7 +611,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(totalPages)}
                         disabled={currentPage === totalPages}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsRight className="h-4 w-4" />
                     </Button>
@@ -628,18 +628,18 @@ export default function PropertiesPage() {
                     <Table className="min-w-[720px]">
                         <TableHeader>
                             <TableRow className="border-slate-800 hover:bg-slate-900">
-                                <TableHead className="text-slate-400">物件名</TableHead>
-                                <TableHead className="text-slate-400">カテゴリ</TableHead>
-                                <TableHead className="text-slate-400">価格</TableHead>
-                                <TableHead className="text-slate-400">登録日</TableHead>
-                                <TableHead className="text-slate-400">ステータス</TableHead>
-                                <TableHead className="text-slate-400 text-right">アクション</TableHead>
+                                <TableHead className="text-slate-300">物件名</TableHead>
+                                <TableHead className="text-slate-300">カテゴリ</TableHead>
+                                <TableHead className="text-slate-300">価格</TableHead>
+                                <TableHead className="text-slate-300">登録日</TableHead>
+                                <TableHead className="text-slate-300">ステータス</TableHead>
+                                <TableHead className="text-slate-300 text-right">アクション</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-10 text-slate-400">
+                                    <TableCell colSpan={6} className="text-center py-10 text-slate-300">
                                         <div className="flex items-center justify-center gap-2">
                                             <div className="animate-spin h-5 w-5 border-2 border-emerald-500 rounded-full border-t-transparent"></div>
                                             読み込み中...
@@ -648,7 +648,7 @@ export default function PropertiesPage() {
                                 </TableRow>
                             ) : currentProperties.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-10 text-slate-400">
+                                    <TableCell colSpan={6} className="text-center py-10 text-slate-300">
                                         <p className="mb-3">条件に一致する物件がありません</p>
                                         <Button
                                             variant="outline"
@@ -678,7 +678,7 @@ export default function PropertiesPage() {
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-emerald-400 font-bold">{property.price}</TableCell>
-                                    <TableCell className="text-slate-400 text-sm">{property.first_seen_date}</TableCell>
+                                    <TableCell className="text-slate-300 text-sm">{property.first_seen_date}</TableCell>
                                     <TableCell>
                                         <Badge className={property.is_active ? "bg-emerald-900 text-emerald-200" : "bg-red-900 text-red-200"}>
                                             {property.is_active ? "販売中" : "成約済"}
@@ -692,7 +692,7 @@ export default function PropertiesPage() {
                                                 </Button>
                                             </Link>
                                             <a href={property.url} target="_blank" rel="noopener noreferrer">
-                                                <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white">
+                                                <Button size="sm" variant="ghost" className="text-slate-300 hover:text-white">
                                                     <ExternalLink className="h-4 w-4" />
                                                 </Button>
                                             </a>
@@ -713,7 +713,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(1)}
                         disabled={currentPage === 1}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsLeft className="h-4 w-4" />
                     </Button>
@@ -722,7 +722,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -737,7 +737,7 @@ export default function PropertiesPage() {
                                 className={`h-10 min-w-[40px] px-3 text-sm ${
                                     currentPage === page
                                         ? 'bg-emerald-600 text-white border-emerald-500'
-                                        : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700'
+                                        : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700'
                                 }`}
                             >
                                 {page}
@@ -752,7 +752,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -761,7 +761,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(totalPages)}
                         disabled={currentPage === totalPages}
-                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsRight className="h-4 w-4" />
                     </Button>

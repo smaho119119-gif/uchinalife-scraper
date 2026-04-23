@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "sonner";
+import { useProposalDraft } from "@/lib/use-proposal-draft";
+import { usePropertyTitles } from "@/lib/use-property-titles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,76 +39,31 @@ interface Props {
   onPreview: (proposal: ProposalData) => void;
 }
 
-const STORAGE_KEY = "uchina-proposal-draft";
-
 export default function ProposalBuilder({ onPreview }: Props) {
-  const [clientName, setClientName] = useState("");
-  const [clientCompany, setClientCompany] = useState("");
-  const [notes, setNotes] = useState("");
-  const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
-  const [includeMarketData, setIncludeMarketData] = useState(false);
+  const {
+    draft,
+    setClientName,
+    setClientCompany,
+    setNotes,
+    setPropertyUrls: setSelectedUrls,
+    setIncludeMarketData,
+    clear: clearDraft,
+  } = useProposalDraft();
+  const {
+    clientName,
+    clientCompany,
+    notes,
+    propertyUrls: selectedUrls,
+    includeMarketData,
+  } = draft;
+  const propertyTitles = usePropertyTitles(selectedUrls);
 
-  // Property titles cache for display
-  const [propertyTitles, setPropertyTitles] = useState<
-    Record<string, string>
-  >({});
-
-  // Load draft from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const draft = JSON.parse(saved) as ProposalData;
-        setClientName(draft.clientName || "");
-        setClientCompany(draft.clientCompany || "");
-        setNotes(draft.notes || "");
-        setSelectedUrls(draft.propertyUrls || []);
-        setIncludeMarketData(draft.includeMarketData || false);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Save draft to localStorage on changes
-  useEffect(() => {
-    try {
-      const draft: ProposalData = {
-        clientName,
-        clientCompany,
-        notes,
-        propertyUrls: selectedUrls,
-        includeMarketData,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-    } catch {
-      // ignore
-    }
-  }, [clientName, clientCompany, notes, selectedUrls, includeMarketData]);
-
-  // Fetch titles for selected URLs
-  useEffect(() => {
-    if (selectedUrls.length === 0) return;
-
-    const missing = selectedUrls.filter((u) => !propertyTitles[u]);
-    if (missing.length === 0) return;
-
-    const encoded = missing.map((u) => encodeURIComponent(u)).join(",");
-    fetch(`/api/sales/proposal?urls=${encoded}`)
-      .then((res) => res.json())
-      .then((data: Array<{ url: string; title: string }>) => {
-        const map: Record<string, string> = {};
-        for (const p of data) {
-          map[p.url] = p.title;
-        }
-        setPropertyTitles((prev) => ({ ...prev, ...map }));
-      })
-      .catch(() => {});
-  }, [selectedUrls, propertyTitles]);
-
-  const handleSelectionChange = useCallback((urls: string[]) => {
-    setSelectedUrls(urls);
-  }, []);
+  const handleSelectionChange = useCallback(
+    (urls: string[]) => {
+      setSelectedUrls(urls);
+    },
+    [setSelectedUrls],
+  );
 
   const moveProperty = (index: number, direction: "up" | "down") => {
     const newUrls = [...selectedUrls];
@@ -147,12 +104,7 @@ export default function ProposalBuilder({ onPreview }: Props) {
   const handleClearDraft = () => setClearConfirmOpen(true);
 
   const confirmClearDraft = () => {
-    setClientName("");
-    setClientCompany("");
-    setNotes("");
-    setSelectedUrls([]);
-    setIncludeMarketData(false);
-    localStorage.removeItem(STORAGE_KEY);
+    clearDraft();
     toast.success("提案書の下書きを削除しました");
   };
 
