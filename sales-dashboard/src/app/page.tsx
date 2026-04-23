@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import InteractiveMap from '@/components/InteractiveMap';
@@ -9,26 +8,20 @@ import TrendAnalytics from '@/components/TrendAnalytics';
 import { Home, TrendingUp, MapPin, Activity, BarChart3, DollarSign, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { useApi } from '@/lib/use-api';
+import { ErrorBanner } from '@/components/ui/error-banner';
+
+interface DashboardStats {
+  total: number;
+  newToday: number;
+  soldToday: number;
+  byType: { '賃貸': number; '売買': number };
+  byCategory: Array<{ category_name_ja: string; genre_name_ja: string; count: number }>;
+  categories: Record<string, number>;
+}
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const response = await fetch('/api/stats');
-      const data = await response.json();
-      setStats(data);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: stats, error, loading, refetch } = useApi<DashboardStats>('/api/stats');
 
   if (loading) {
     return (
@@ -37,6 +30,14 @@ export default function Dashboard() {
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-4 border-cyan-500 mb-4"></div>
           <p className="text-slate-700 dark:text-slate-400 font-bold">読み込み中...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <ErrorBanner message={error} onRetry={refetch} />
       </div>
     );
   }

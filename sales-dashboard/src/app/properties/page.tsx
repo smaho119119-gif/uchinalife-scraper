@@ -565,7 +565,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(1)}
                         disabled={currentPage === 1}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsLeft className="h-4 w-4" />
                     </Button>
@@ -574,7 +574,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -586,7 +586,7 @@ export default function PropertiesPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handlePageChange(page)}
-                                className={`h-8 min-w-[2rem] px-2 text-xs ${
+                                className={`h-10 min-w-[40px] px-3 text-sm ${
                                     currentPage === page
                                         ? 'bg-emerald-600 text-white border-emerald-500'
                                         : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700'
@@ -604,7 +604,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -613,7 +613,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(totalPages)}
                         disabled={currentPage === totalPages}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsRight className="h-4 w-4" />
                     </Button>
@@ -651,7 +651,15 @@ export default function PropertiesPage() {
                             ) : currentProperties.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} className="text-center py-10 text-slate-400">
-                                        条件に一致する物件がありません
+                                        <p className="mb-3">条件に一致する物件がありません</p>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={clearFilters}
+                                            className="bg-slate-800/50 border-slate-700 text-slate-200 hover:bg-slate-700"
+                                        >
+                                            フィルターをクリア
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ) : currentProperties.map((property) => (
@@ -707,7 +715,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(1)}
                         disabled={currentPage === 1}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsLeft className="h-4 w-4" />
                     </Button>
@@ -716,7 +724,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -728,7 +736,7 @@ export default function PropertiesPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handlePageChange(page)}
-                                className={`h-8 min-w-[2rem] px-2 text-xs ${
+                                className={`h-10 min-w-[40px] px-3 text-sm ${
                                     currentPage === page
                                         ? 'bg-emerald-600 text-white border-emerald-500'
                                         : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700'
@@ -746,7 +754,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -755,7 +763,7 @@ export default function PropertiesPage() {
                         size="sm"
                         onClick={() => handlePageChange(totalPages)}
                         disabled={currentPage === totalPages}
-                        className="h-8 w-8 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
+                        className="h-10 w-10 p-0 bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-700 disabled:opacity-50"
                     >
                         <ChevronsRight className="h-4 w-4" />
                     </Button>

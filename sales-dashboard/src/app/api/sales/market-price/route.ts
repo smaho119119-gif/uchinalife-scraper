@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSupabase } from '@/lib/supabase-server';
 import { createClient } from "@supabase/supabase-js";
 import {
   parsePrice,
@@ -10,12 +11,11 @@ import {
 } from "@/lib/price";
 import { extractCityName, getAdjacentCities } from "@/lib/area";
 
+export const dynamic = 'force-dynamic';
+
 // ---------------------------------------------------------------------------
 // Supabase client (same pattern as analytics/areas/route.ts)
 // ---------------------------------------------------------------------------
-
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_ANON_KEY!;
 
 // ---------------------------------------------------------------------------
 // Category helpers
@@ -181,7 +181,7 @@ interface RawProperty {
 async function fetchAllPropertiesForCategory(
   category: string,
 ): Promise<RawProperty[]> {
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = getSupabase();
   const results: RawProperty[] = [];
   let from = 0;
   const pageSize = 1000;

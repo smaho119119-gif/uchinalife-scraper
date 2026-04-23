@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
+import { safeParseJson } from '@/lib/json';
 import { supabase } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 
 // Cache for 5 minutes
 let cachedData: { markers: any[], timestamp: number } | null = null;
@@ -34,8 +37,8 @@ export async function GET(request: Request) {
 
         // Extract location information and create map markers
         const markers = (properties || []).map((prop: any) => {
-            const data = typeof prop.property_data === 'string' ? JSON.parse(prop.property_data) : prop.property_data || {};
-            const images = typeof prop.images === 'string' ? JSON.parse(prop.images) : prop.images || [];
+            const data = safeParseJson(prop.property_data);
+            const images = safeParseJson<unknown[]>(prop.images, []);
 
             // Extract location from property_data
             const location = data['住所'] || data['所在地'] || data['location'] || '';

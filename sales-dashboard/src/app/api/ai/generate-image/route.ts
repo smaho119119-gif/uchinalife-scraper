@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/db';
+import { safeParseJson } from '@/lib/json';
 import { generatePropertyImageWithPhotos, ImageModelKey } from '@/lib/ai';
 import { NextResponse } from 'next/server';
 import axios from 'axios';
@@ -32,8 +33,8 @@ export async function POST(request: Request) {
 
         const propertyData = {
             ...property,
-            images: typeof property.images === 'string' ? JSON.parse(property.images) : property.images || [],
-            property_data: typeof property.property_data === 'string' ? JSON.parse(property.property_data) : property.property_data || {},
+            images: safeParseJson<unknown[]>(property.images, []),
+            property_data: safeParseJson(property.property_data),
         };
 
         // Parse selected property images

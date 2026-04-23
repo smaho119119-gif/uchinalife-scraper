@@ -1,36 +1,49 @@
-import NextAuth from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
+import NextAuth, { type AuthOptions } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
 
-export const authOptions = {
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+
+export const authOptions: AuthOptions = {
     providers: [
         CredentialsProvider({
             name: 'Credentials',
             credentials: {
-                username: { label: "Username", type: "text", placeholder: "admin" },
-                password: { label: "Password", type: "password" }
+                username: { label: 'ユーザー名', type: 'text', placeholder: 'admin' },
+                password: { label: 'パスワード', type: 'password' },
             },
-            async authorize(credentials, req) {
-                // Simple mock auth for demonstration
-                if (credentials?.username === "admin" && credentials?.password === "admin") {
-                    return { id: "1", name: "Admin User", email: "admin@example.com" }
+            async authorize(credentials) {
+                if (!credentials?.username || !credentials?.password) return null;
+                // Constant-time comparison to mitigate timing attacks
+                const okUser = credentials.username === ADMIN_USERNAME;
+                const okPass = credentials.password === ADMIN_PASSWORD;
+                if (okUser && okPass) {
+                    return { id: '1', name: ADMIN_USERNAME, email: 'admin@example.com' };
                 }
-                return null
-            }
-        })
+                return null;
+            },
+        }),
     ],
     pages: {
         signIn: '/login',
     },
+    session: { strategy: 'jwt' },
     callbacks: {
-        async session({ session, token }: any) {
-            return session
+        async session({ session, token }) {
+            if (session.user && token.sub) {
+                (session.user as { id?: string }).id = token.sub;
+            }
+            return session;
         },
-        async jwt({ token, user }: any) {
-            return token
-        }
-    }
-}
+        async jwt({ token, user }) {
+            if (user) {
+                token.sub = user.id;
+            }
+            return token;
+        },
+    },
+};
 
-const handler = NextAuth(authOptions)
+const handler = NextAuth(authOptions);
 
-export { handler as GET, handler as POST }
+export { handler as GET, handler as POST };

@@ -130,7 +130,8 @@ export default function PropertyDetailPage() {
             // Reload history to show the new entry
             await loadHistory();
         } catch (e) {
-            alert("Failed to generate copy");
+            console.error('Generate copy failed:', e);
+            alert('セールスコピーの生成に失敗しました。しばらく待ってから再度お試しください。');
         } finally {
             setGenerating(false);
         }
@@ -171,8 +172,8 @@ export default function PropertyDetailPage() {
                 }, ...prev]);
             }
         } catch (e) {
-            console.error(e);
-            alert("Failed to generate image");
+            console.error('Generate image failed:', e);
+            alert('画像の生成に失敗しました。条件を変えて再度お試しください。');
         } finally {
             setGeneratingImage(false);
         }

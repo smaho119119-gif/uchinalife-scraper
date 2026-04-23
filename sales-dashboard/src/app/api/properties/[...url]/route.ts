@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/db';
+import { safeParseJson } from '@/lib/json';
 import { NextResponse } from 'next/server';
 
 export async function GET(request: Request, { params }: { params: Promise<{ url: string[] }> }) {
@@ -19,8 +20,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ url:
         // キャッシュヘッダーを追加（5分間キャッシュ）
         return NextResponse.json({
             ...property,
-            images: typeof property.images === 'string' ? JSON.parse(property.images) : property.images || [],
-            property_data: typeof property.property_data === 'string' ? JSON.parse(property.property_data) : property.property_data || {},
+            images: safeParseJson<unknown[]>(property.images, []),
+            property_data: safeParseJson(property.property_data),
             is_active: Boolean(property.is_active)
         }, {
             headers: {

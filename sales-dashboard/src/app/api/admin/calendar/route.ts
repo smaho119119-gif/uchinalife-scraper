@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSupabase } from '@/lib/supabase-server';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createClient } from '@supabase/supabase-js';
 import { format, parseISO } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
+
+export const dynamic = 'force-dynamic';
 
 const PROJECT_ROOT = '/Users/hiroki/Documents/うちなーらいふスクレイピング';
 const LOGS_DIR = path.join(PROJECT_ROOT, 'logs');
 const OUTPUT_DIR = path.join(PROJECT_ROOT, 'output');
 const GITHUB_REPO = 'smaho119119-gif/uchinalife-scraper';
 const GITHUB_WORKFLOW_FILE = 'property-scraper.yml';
-
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_ANON_KEY!;
 
 // キャッシュ（10分間有効）
 let calendarCache: Map<string, { data: any; timestamp: number }> = new Map();
@@ -129,11 +128,7 @@ function utcToJSTDate(utcDateString: string): string {
 // Supabaseのデータ保存状況を確認（JST日付で）
 async function checkSupabaseData(date: string): Promise<{ saved: boolean; count: number }> {
     try {
-        if (!supabaseUrl || !supabaseKey) {
-            return { saved: false, count: 0 };
-        }
-
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = getSupabase();
         // JST日付をUTC時刻範囲に変換（自動的にタイムゾーン差を調整）
         const { startUTC, endUTC } = getJSTDateRange(date);
 
@@ -158,11 +153,7 @@ async function checkSupabaseData(date: string): Promise<{ saved: boolean; count:
 // Supabaseのデータ保存状況を確認（特定の時刻範囲で）
 async function checkSupabaseDataInRange(startUTC: string, endUTC: string): Promise<{ saved: boolean; count: number }> {
     try {
-        if (!supabaseUrl || !supabaseKey) {
-            return { saved: false, count: 0 };
-        }
-
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = getSupabase();
 
         const { count, error } = await supabase
             .from('properties')
@@ -255,8 +246,8 @@ async function getMonthCalendar(year: number, month: number) {
     const snapshotsByDate: Record<string, { totalLinks: number; categories: Record<string, number> }> = {};
 
     try {
-        if (supabaseUrl && supabaseKey) {
-            const supabase = createClient(supabaseUrl, supabaseKey);
+        {
+            const supabase = getSupabase();
             const { data: snapshots } = await supabase
                 .from('daily_link_snapshots')
                 .select('snapshot_date, category, url_count')
@@ -406,8 +397,8 @@ async function getDayDetails(date: string) {
     let snapshotLinks = 0;
     const snapshotCategories: Record<string, number> = {};
     try {
-        if (supabaseUrl && supabaseKey) {
-            const supabase = createClient(supabaseUrl, supabaseKey);
+        {
+            const supabase = getSupabase();
             const snapshotResult = await supabase
                 .from('daily_link_snapshots')
                 .select('category, url_count')

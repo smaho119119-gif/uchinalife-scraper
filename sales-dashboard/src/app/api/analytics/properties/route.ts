@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabase } from '@/lib/supabase-server';
 
+export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
     try {
         const supabaseUrl = process.env.SUPABASE_URL;
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
             );
         }
 
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        const supabase = getSupabase();
         const { searchParams } = new URL(request.url);
         const filter = searchParams.get('filter'); // 'active', 'newToday', 'soldToday', 'inactive'
         const category = searchParams.get('category'); // category ID
