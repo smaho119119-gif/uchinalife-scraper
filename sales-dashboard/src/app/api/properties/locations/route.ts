@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { safeParseJson } from '@/lib/json';
 import { supabase } from '@/lib/db';
+import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,12 +76,8 @@ export async function GET(request: Request) {
             markers,
             cached: false
         });
-    } catch (error: any) {
-        console.error('Error fetching location data:', error);
-        return NextResponse.json(
-            { success: false, error: error.message },
-            { status: 500 }
-        );
+    } catch (error) {
+        return jsonError(logAndSerializeError('properties/locations', error));
     }
 }
 

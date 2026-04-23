@@ -30,7 +30,8 @@ import {
     RefreshCw,
 } from 'lucide-react';
 import PropertyModal from '@/components/PropertyModal';
-import { propertyCache } from '@/lib/propertyCache';
+import { useApi } from '@/lib/use-api';
+import { ErrorBanner } from '@/components/ui/error-banner';
 
 interface DiffAnalytics {
     summary: {
@@ -92,9 +93,9 @@ const CATEGORY_COLORS = [
 export default function AnalyticsPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const [analytics, setAnalytics] = useState<DiffAnalytics | null>(null);
-    const [loading, setLoading] = useState(true);
     const [days, setDays] = useState(7);
+    const { data: analytics, error: analyticsError, loading, refetch: refetchAnalytics } =
+        useApi<DiffAnalytics>(`/api/analytics/diff?days=${days}`);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalFilter, setModalFilter] = useState<'active' | 'newToday' | 'soldToday' | 'inactive' | 'total'>('total');
     const [modalTitle, setModalTitle] = useState('');
@@ -136,38 +137,17 @@ export default function AnalyticsPage() {
         router.push('/analytics', { scroll: false });
     };
 
-    const fetchAnalytics = async (forceRefresh = false) => {
-        const cacheKey = `analytics-${days}`;
+    // useApi handles fetch + cancellation; the days dependency triggers a refetch
+    // automatically. Keep an alias so existing call-sites stay readable.
+    const fetchAnalytics = (_forceRefresh = false) => refetchAnalytics();
 
-        // Check cache first (unless force refresh)
-        if (!forceRefresh) {
-            const cachedData = propertyCache.get<DiffAnalytics>(cacheKey);
-            if (cachedData) {
-                console.log('✅ Using cached analytics data');
-                setAnalytics(cachedData);
-                setLoading(false);
-                return;
-            }
-        }
-
-        setLoading(true);
-        try {
-            const response = await fetch(`/api/analytics/diff?days=${days}`);
-            const data = await response.json();
-
-            // Cache the data
-            propertyCache.set(cacheKey, data);
-            setAnalytics(data);
-        } catch (error) {
-            console.error('Failed to fetch analytics:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchAnalytics();
-    }, [days]);
+    if (analyticsError) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-8">
+                <ErrorBanner message={analyticsError} onRetry={refetchAnalytics} />
+            </div>
+        );
+    }
 
     if (loading || !analytics) {
         return (

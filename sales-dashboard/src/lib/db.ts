@@ -1,53 +1,27 @@
-import { createClient } from '@supabase/supabase-js';
+/**
+ * Supabase data access layer.
+ *
+ * Re-exports types from lib/types.ts (single source of truth) and provides
+ * legacy `supabase` client + helper functions used by older code paths.
+ * New code should prefer `getSupabase()` from `lib/supabase-server.ts`.
+ */
+import { getSupabase } from '@/lib/supabase-server';
+import { safeParseJson } from '@/lib/json';
 
-// 環境変数の取得（サーバーサイド・クライアントサイド両対応）
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+export type { Property, StaffPhoto, GeneratedImage } from '@/lib/types';
+import type { Property, StaffPhoto, GeneratedImage } from '@/lib/types';
 
-// Supabaseクライアントの初期化
-export const supabase = createClient(supabaseUrl, supabaseKey);
-
-// ============================================
-// 型定義
-// ============================================
-
-export interface Property {
-    url: string;
-    category: string;
-    category_type: string;
-    category_name_ja: string;
-    genre_name_ja: string;
-    title: string;
-    price: string;
-    favorites: number;
-    update_date: string;
-    expiry_date: string;
-    images: string[];
-    company_name: string;
-    property_data: any;
-    is_active: boolean;
-    first_seen_date: string;
-    last_seen_date: string;
-}
-
-export interface StaffPhoto {
-    id: string;
-    name: string;
-    data_url: string;
-    created_at: string;
-}
-
-export interface GeneratedImage {
-    id: number;
-    property_url: string;
-    image_url: string;
-    filename: string;
-    mode: string;
-    style: string;
-    size: string;
-    aspect_ratio: string;
-    created_at: string;
-}
+/**
+ * Legacy named export — proxies to the validated server-side client.
+ * Prefer `getSupabase()` directly in new code.
+ */
+export const supabase = new Proxy({} as ReturnType<typeof getSupabase>, {
+    get(_target, prop) {
+        const client = getSupabase();
+        const value = (client as unknown as Record<PropertyKey, unknown>)[prop];
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(client) : value;
+    },
+});
 
 // ============================================
 // 物件データ関連
@@ -68,8 +42,8 @@ export async function getAllProperties(limit: number = 50): Promise<Property[]> 
 
     return (data || []).map(row => ({
         ...row,
-        images: typeof row.images === 'string' ? JSON.parse(row.images) : row.images,
-        property_data: typeof row.property_data === 'string' ? JSON.parse(row.property_data) : row.property_data,
+        images: safeParseJson<string[]>(row.images, []),
+        property_data: safeParseJson(row.property_data),
         is_active: Boolean(row.is_active)
     }));
 }

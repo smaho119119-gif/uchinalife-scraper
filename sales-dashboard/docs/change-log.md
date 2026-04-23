@@ -1,46 +1,55 @@
 # Change Log
 
-## 2026-04-23 — Round 1
+## 2026-04-23 — Round 2 (architectural debt + security)
 
 ### 追加 (Infrastructure)
-- `src/lib/supabase-server.ts` — server-side Supabaseクライアントを集約。env欠損は throw
-- `src/lib/json.ts` — `safeParseJson` ヘルパ
-- `src/lib/categories.ts` — カテゴリ定数の単一情報源
-- `src/lib/api-utils.ts` — `parseIntParam`, `jsonError`, `logAndSerializeError`
-- `src/lib/use-api.ts` — クライアント `useApi` フック (AbortController + error/loading state)
-- `src/components/ui/error-banner.tsx` — エラーUI共通化
+- `src/lib/types.ts` — Property/StaffPhoto/GeneratedImage 型を集約（lib/db, supabase, indexで重複していたものを単一情報源化）
+- `src/lib/rate-limit.ts` — in-memory token-bucket（serverless 友好的、コメントで分散環境の制約を明記）
+- `src/lib/auth-helpers.ts` — `getActorKey` / `enforceRateLimit`（ユーザID or IPで識別、429返却）
+- `src/components/ui/confirm-dialog.tsx` — 破壊的操作向け共通モーダル（Esc/overlay close、disabled while busy）
 
-### 修正 (Critical)
-- **CRIT-01** `api/auth/[...nextauth]/route.ts` — 認証情報を env (`ADMIN_USERNAME`/`ADMIN_PASSWORD`) 経由に。`AuthOptions` 型と JWT セッション設定を整備
-- **CRIT-02** `src/middleware.ts` — matcher を整理し、未認証 API 呼び出しを 401 で返却。callbackUrl 付き `/login` リダイレクト
-- **CRIT-03** 全API routes (`stats`, `admin/stats`, `analytics/diff`, `analytics/areas`, `analytics/trends`, `sales/area-stats`, `sales/featured/by-area`, `sales/featured/new-listings`, `sales/featured/pet-friendly`, `admin/calendar`, etc.) — `getSupabase()` に置換、env欠損時即throw
-- **CRIT-04** `safeParseJson` を `pet-friendly`, `new-listings`, `properties/[...url]`, `properties/locations`, `ai/generate`, `ai/generate-image` に適用 (try/catch漏れ撲滅)
-- **CRIT-05** `app/page.tsx` — `useApi` + `ErrorBanner` 適用。fetch失敗時に再試行UI表示
-- **CRIT-06** `components/sidebar.tsx` + `sidebar-wrapper.tsx` — モバイルドロワー化、ハンバーガーメニュー追加、ルート遷移時自動close
-- **CRIT-08** クライアント fetch を `useApi` 経由に置き換え (AbortController標準装備)
+### 整理 (Refactor)
+- `src/lib/db.ts` — 型は types.ts から re-export、`supabase` クライアントは `getSupabase()` の Proxy 経由（env 検証統一）
+- `src/lib/supabase.ts` / `src/lib/index.ts` — db.ts への薄い再エクスポートに置換（後続Round で完全削除）
+- `src/lib/propertyCache.ts` — SSR セーフ化（`window` チェック、TTL明示）+ コメントで分散環境の制約を文書化
 
-### 修正 (Medium)
-- **MED-01** `parseIntParam(raw, default, min, max)` で `analytics/diff`, `analytics/trends`, `sales/featured/new-listings`, `properties` を保護
-- **MED-03** `properties/[...url]/page.tsx` の英文 alert を日本語に変更
-- **MED-04 / MED-05** Supabase env を `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY||SUPABASE_ANON_KEY` に統一、`getSupabase()` で1点管理
-- **MED-07** `app/layout.tsx` の metadata を「沖縄不動産 営業ダッシュボード」+ `robots: noindex` に
-- **MED-12** `properties/page.tsx` empty stateに「フィルターをクリア」CTA追加
+### セキュリティ
+- **NextAuth**: `session.maxAge=8h`, `updateAge=1h`, `jwt.maxAge=8h` を設定 (R2-05)
+- **HTTP セキュリティヘッダ**: middleware で全レスポンスに `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `HSTS`, `CSP` を付与 (R2-06)
+- **AI レートリミット**: `/api/ai/generate` 20/分、`/api/ai/generate-image` 10/分、`/api/ai/analyze-popularity` 20/分、`/api/ai/sync-images` 5/分、`/api/staff-photos` 30/分、`/api/admin/scraping` 5/分 (R2-07/14)
+- **Scraping API**: `categories` を `isValidCategory` で allowlist 検証（シェル injection 攻撃面を撲滅）、レートリミット適用 (R2-14)
+- **Staff photos**: 1.5MB上限、JPEG/PNG/WebP の MIME 検証、name 100文字上限、エラー文言日本語化 (R2-15)
+- **RPC allowlist**: `/api/sales/featured/{by-area,new-listings,pet-friendly}`, `/api/sales/area-stats`, `/api/analytics/properties` で `category`/`type` を `isValidCategory` で検証 (R2-13)
+- **Date timezone**: `/api/analytics/properties` の `today` 計算を `date-fns-tz` で JST 化（UTC ズレで「本日」が9時間ずれる問題を解決） (R2-11)
+- **Calendar bounds**: `year` を 2020〜2099、`month` を 1〜12 に clamp。`date` は `YYYY-MM-DD` 厳密検証 (R2-12)
+- **エラーログ統一**: 残ったルート (`analytics/areas`, `properties/locations`, `sales/area-stats`, `sales/featured/by-area`, `sales/featured/new-listings`, `sales/featured/pet-friendly`) を `jsonError` + `logAndSerializeError` に統一 (R2-16)
 
-### 修正 (Light/UX)
-- **LOW-01** `components/ui/button.tsx` に `disabled:cursor-not-allowed disabled:hover:scale-100`
-- **LOW-02** `properties/page.tsx` ページネーションボタン `h-8` → `h-10`、min-w 拡大
-- `app/login/page.tsx` — Suspense + LoginForm 分離、callbackUrl 対応、loading state、エラー表示の inline 化、autoComplete 追加
-- `app/layout.tsx` — `lang="en"` → `lang="ja"`
-
-### ビルド対応
-- すべての `request.url` 使用 API route に `export const dynamic = 'force-dynamic'` 追加 (Next.js 16 静的生成エラー回避)
-- `app/login/page.tsx` を `<Suspense>` 境界で wrap (`useSearchParams` 静的化エラー解消)
+### UI / UX
+- **クライアント fetch を useApi に移行** (R2-03/04):
+  - `app/properties/page.tsx` — AbortController + ErrorBanner + retry
+  - `app/analytics/page.tsx` — propertyCache 依存を撤廃、useApi に集約、ErrorBanner で復帰
+  - `app/sales/area-analysis/page.tsx` — 同上、cancelled flag を useApi の AbortController に統合
+  - `components/AreaAnalytics.tsx`, `components/TrendAnalytics.tsx` — 同上
+- **削除確認ダイアログ** (R2-09):
+  - `ProposalBuilder.tsx`: 物件削除 / 下書きクリアに `ConfirmDialog`
+  - `ImageGenerator.tsx`: 既存 inline 確認UIを文言追加・aria-label・Esc対応・focus-visible 強化
+- **アクセシビリティ** (R2-10):
+  - `app/admin/page.tsx`: ギャラリー画像 alt を「生成画像のプレビュー」に
+  - スタッフ削除ボタンに aria-label、`role="alertdialog"`、`aria-modal`、autoFocus
 
 ### 副作用チェック結果
-- `npx tsc --noEmit` → エラーゼロ
+- `npx tsc --noEmit` → 0 errors
 - `npx next build` → 全ルート生成成功
-- 既存レスポンス互換性: `/api/stats` の `total/newToday/soldToday/byType/byCategory/categories` 維持。`/api/analytics/trends` の `summary/trends` 維持
-- middleware 仕様変更により未認証 API は 401 を返す → 公開ページ (`/sales/featured/*`) と auth (`/api/auth/*`) のみアクセス可
+- 既存レスポンス互換性: stats/analytics/featured 全て維持
+- middleware 仕様変更（headers のみ追加、auth ロジック不変）
+- lib/db.ts は Proxy 経由で getSupabase に。既存 `import { supabase } from '@/lib/db'` は呼び出し時に env 検証するよう変更（テスト環境を持たない呼び出しでは初回アクセス時に throw する）
 
-### 残課題
-`docs/issues.md` 参照
+### 残課題 → Round 3 へ持ち越し (`docs/issues.md`)
+- admin/page.tsx (2255行) の分割
+- InteractiveMap.tsx (738行) の useReducer 化
+- AI prompts の templates 化
+- sales/* コンポーネント の hooks 抽出
+- モバイルレイアウト全面対応
+- WCAG コントラスト全面修正
+- Toast 通知システム
+- Supabase RLS 強化（バックエンドDBスキーマ移行が必要）

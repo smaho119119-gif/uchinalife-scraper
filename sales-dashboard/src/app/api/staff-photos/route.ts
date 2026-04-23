@@ -1,87 +1,99 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllStaffPhotos, saveStaffPhoto, deleteStaffPhoto, initDefaultStaffPhotos } from '@/lib/db';
+import { jsonError, logAndSerializeError } from '@/lib/api-utils';
+import { enforceRateLimit } from '@/lib/auth-helpers';
 
 export const dynamic = 'force-dynamic';
-// import fs from 'fs';
-// import path from 'path';
+
+// 1.5MB の base64 (≒ 1.1MB のオリジナル画像)
+const MAX_DATAURL_LENGTH = 1_500_000;
+const ALLOWED_MIME_PREFIXES = [
+    'data:image/jpeg;',
+    'data:image/jpg;',
+    'data:image/png;',
+    'data:image/webp;',
+];
+
+function isAllowedDataUrl(value: string): boolean {
+    if (!value.startsWith('data:image/')) return false;
+    return ALLOWED_MIME_PREFIXES.some((p) => value.startsWith(p));
+}
 
 // GET: 全スタッフ写真を取得
 export async function GET() {
     try {
-        // デフォルト写真を初期化（テーブルが空の場合）
         await initDefaultStaffPhotos();
-
         const photos = await getAllStaffPhotos();
-
-        // フロントエンド用の形式に変換
-        const formattedPhotos = photos.map(p => ({
+        const formattedPhotos = photos.map((p) => ({
             id: p.id,
             name: p.name,
-            dataUrl: p.data_url, // URLまたはbase64
-            timestamp: new Date(p.created_at).getTime()
+            dataUrl: p.data_url,
+            timestamp: new Date(p.created_at).getTime(),
         }));
-
         return NextResponse.json({ photos: formattedPhotos });
     } catch (error) {
-        console.error('Error fetching staff photos:', error);
-        return NextResponse.json({ error: 'Failed to fetch staff photos' }, { status: 500 });
+        return jsonError(logAndSerializeError('staff-photos GET', error));
     }
 }
 
-// POST: スタッフ写真を保存（DBに直接保存）
+// POST: スタッフ写真を保存
 export async function POST(request: NextRequest) {
+    const limited = await enforceRateLimit(request, 'staff-photo-write', 30, 60_000);
+    if (limited) return limited;
     try {
         const body = await request.json();
-        const { id, name, dataUrl } = body;
+        const { id, name, dataUrl } = body ?? {};
 
-        if (!id || !name || !dataUrl) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        if (typeof id !== 'string' || typeof name !== 'string' || typeof dataUrl !== 'string') {
+            return NextResponse.json({ error: '必須項目が不足しています' }, { status: 400 });
+        }
+        if (id.length === 0 || name.length === 0 || name.length > 100) {
+            return NextResponse.json({ error: '入力値が不正です' }, { status: 400 });
+        }
+        if (dataUrl.length > MAX_DATAURL_LENGTH) {
+            return NextResponse.json(
+                { error: '画像サイズが大きすぎます（最大1.1MB相当）' },
+                { status: 413 },
+            );
+        }
+        // External URL (e.g. dicebear avatar) is allowed; otherwise must be image data URL.
+        const isHttpUrl = dataUrl.startsWith('https://') || dataUrl.startsWith('http://');
+        if (!isHttpUrl && !isAllowedDataUrl(dataUrl)) {
+            return NextResponse.json(
+                { error: '対応していない画像形式です（JPEG/PNG/WebPのみ）' },
+                { status: 415 },
+            );
         }
 
-        // Vercel環境ではファイルシステムへの保存はできないため、
-        // dataUrlをそのままDBに保存する方式に変更
-        // 本来はSupabase Storage等のオブジェクトストレージを使用すべきだが、
-        // 簡易対応としてDBのカラム(text)に保存する。
-        // サイズが大きすぎるとエラーになる可能性があるため注意が必要。
-
-        // データベースに保存
         const photo = await saveStaffPhoto(id, name, dataUrl);
-
         return NextResponse.json({
             success: true,
             photo: {
                 id: photo.id,
                 name: photo.name,
                 dataUrl: photo.data_url,
-                timestamp: new Date(photo.created_at).getTime()
-            }
+                timestamp: new Date(photo.created_at).getTime(),
+            },
         });
     } catch (error) {
-        console.error('Error saving staff photo:', error);
-        return NextResponse.json({ error: 'Failed to save staff photo' }, { status: 500 });
+        return jsonError(logAndSerializeError('staff-photos POST', error));
     }
 }
 
 // DELETE: スタッフ写真を削除
 export async function DELETE(request: NextRequest) {
+    const limited = await enforceRateLimit(request, 'staff-photo-write', 30, 60_000);
+    if (limited) return limited;
     try {
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
-
         if (!id) {
-            return NextResponse.json({ error: 'Missing photo ID' }, { status: 400 });
+            return NextResponse.json({ error: 'IDが指定されていません' }, { status: 400 });
         }
-
         const success = await deleteStaffPhoto(id);
-
-        if (success) {
-            return NextResponse.json({ success: true });
-        } else {
-            return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
-        }
+        if (success) return NextResponse.json({ success: true });
+        return NextResponse.json({ error: '指定された写真が見つかりません' }, { status: 404 });
     } catch (error) {
-        console.error('Error deleting staff photo:', error);
-        return NextResponse.json({ error: 'Failed to delete staff photo' }, { status: 500 });
+        return jsonError(logAndSerializeError('staff-photos DELETE', error));
     }
 }
-

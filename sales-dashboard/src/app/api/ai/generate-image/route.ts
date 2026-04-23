@@ -5,8 +5,11 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { enforceRateLimit } from '@/lib/auth-helpers';
 
 export async function POST(request: Request) {
+    const limited = await enforceRateLimit(request, 'ai-image', 10, 60_000);
+    if (limited) return limited;
     try {
         const formData = await request.formData();
 

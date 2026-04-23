@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase-server';
 import { safeParseJson } from '@/lib/json';
 import { parseIntParam, jsonError, logAndSerializeError } from '@/lib/api-utils';
+import { isValidCategory } from '@/lib/categories';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,8 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabase();
     const { searchParams } = new URL(request.url);
     const days = parseIntParam(searchParams.get('days'), 7, 1, 90);
-    const categoryFilter = searchParams.get('category');
+    const rawCategory = searchParams.get('category');
+    const categoryFilter = rawCategory && isValidCategory(rawCategory) ? rawCategory : null;
 
     // Calculate cutoff date
     const cutoffDate = new Date();
@@ -34,10 +36,7 @@ export async function GET(request: NextRequest) {
 
     const { data: allProperties, error } = await query;
 
-    if (error) {
-      console.error('Error fetching properties:', error);
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
+    if (error) throw error;
 
     const newListings = (allProperties || []).map((prop) => {
       const pd = safeParseJson(prop.property_data);

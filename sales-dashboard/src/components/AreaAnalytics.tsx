@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, TrendingDown, MapPin, Activity } from 'lucide-react';
+import { useApi } from '@/lib/use-api';
+import { ErrorBanner } from '@/components/ui/error-banner';
 
 interface AreaData {
     city: string;
@@ -21,32 +23,31 @@ interface AreaData {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16', '#6b7280'];
 
+interface AreasResponse {
+    success: boolean;
+    areas: AreaData[];
+    totalAreas: number;
+}
+
 export default function AreaAnalytics() {
-    const [areas, setAreas] = useState<AreaData[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data, error, loading, refetch } = useApi<AreasResponse>('/api/analytics/areas');
+    const areas = data?.areas ?? [];
     const [selectedArea, setSelectedArea] = useState<AreaData | null>(null);
 
+    // Default the selected area to the most active one once data arrives.
     useEffect(() => {
-        fetchAreaData();
-    }, []);
-
-    const fetchAreaData = async () => {
-        try {
-            const response = await fetch('/api/analytics/areas');
-            const data = await response.json();
-
-            if (data.success) {
-                setAreas(data.areas);
-                if (data.areas.length > 0) {
-                    setSelectedArea(data.areas[0]);
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching area data:', error);
-        } finally {
-            setLoading(false);
+        if (!selectedArea && areas.length > 0) {
+            setSelectedArea(areas[0]);
         }
-    };
+    }, [areas, selectedArea]);
+
+    if (error) {
+        return (
+            <div className="p-4">
+                <ErrorBanner message={error} onRetry={refetch} />
+            </div>
+        );
+    }
 
     if (loading) {
         return <div className="text-white p-8">読み込み中...</div>;

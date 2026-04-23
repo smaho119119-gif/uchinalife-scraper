@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import { NextResponse } from 'next/server';
+import { enforceRateLimit } from '@/lib/auth-helpers';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
@@ -28,6 +29,8 @@ const ANALYSIS_MODELS = {
 type ModelKey = keyof typeof ANALYSIS_MODELS;
 
 export async function POST(request: Request) {
+    const limited = await enforceRateLimit(request, 'ai-analyze', 20, 60_000);
+    if (limited) return limited;
     try {
         const { url, model } = await request.json();
         const modelKey = (model || 'gemini-3-pro') as ModelKey;

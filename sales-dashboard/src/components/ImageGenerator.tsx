@@ -467,7 +467,9 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                             )}
                             {/* 削除ボタン */}
                             <button
-                                className="absolute top-0 right-0 w-4 h-4 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity rounded-bl"
+                                type="button"
+                                aria-label={`スタッフ写真「${photo.name}」を削除`}
+                                className="absolute top-0 right-0 w-5 h-5 bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded-bl focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setDeleteConfirmId(photo.id);
@@ -475,41 +477,53 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                             >
                                 ×
                             </button>
-                            
+
                             {/* 削除確認オーバーレイ */}
                             {deleteConfirmId === photo.id && (
-                                <div 
-                                    className="absolute inset-0 bg-slate-900/95 rounded flex flex-col items-center justify-center"
+                                <div
+                                    role="alertdialog"
+                                    aria-modal="true"
+                                    aria-label="スタッフ写真の削除確認"
+                                    className="absolute inset-0 bg-slate-900/95 rounded flex flex-col items-center justify-center p-1 gap-1"
                                     onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Escape') {
+                                            e.stopPropagation();
+                                            setDeleteConfirmId(null);
+                                        }
+                                    }}
                                 >
+                                    <span className="text-[9px] text-slate-200 leading-tight text-center">削除しますか？</span>
                                     <div className="flex gap-1">
                                         <button
-                                            className="w-8 h-6 bg-red-600 hover:bg-red-500 text-white text-[10px] rounded font-bold"
+                                            type="button"
+                                            aria-label="削除する"
+                                            className="px-1.5 h-6 bg-red-600 hover:bg-red-500 text-white text-[10px] rounded font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                                            autoFocus
                                             onClick={async (e) => {
                                                 e.stopPropagation();
-                                                // データベースから削除
                                                 try {
-                                                    await fetch(`/api/staff-photos?id=${photo.id}`, {
-                                                        method: 'DELETE'
-                                                    });
+                                                    await fetch(`/api/staff-photos?id=${photo.id}`, { method: 'DELETE' });
                                                 } catch (error) {
                                                     console.error('Failed to delete staff photo:', error);
                                                 }
                                                 if (selectedStaffId === photo.id) setSelectedStaffId(null);
-                                                setSavedStaffPhotos(prev => prev.filter(p => p.id !== photo.id));
+                                                setSavedStaffPhotos((prev) => prev.filter((p) => p.id !== photo.id));
                                                 setDeleteConfirmId(null);
                                             }}
                                         >
-                                            🗑️
+                                            削除
                                         </button>
                                         <button
-                                            className="w-8 h-6 bg-slate-600 hover:bg-slate-500 text-white text-[10px] rounded"
+                                            type="button"
+                                            aria-label="キャンセル"
+                                            className="px-1.5 h-6 bg-slate-600 hover:bg-slate-500 text-white text-[10px] rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setDeleteConfirmId(null);
                                             }}
                                         >
-                                            ✕
+                                            戻る
                                         </button>
                                     </div>
                                 </div>

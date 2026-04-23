@@ -1,70 +1,56 @@
-// Global cache for property data
+/**
+ * Browser-only in-memory cache (5-minute TTL).
+ *
+ * Lives only on the client. Survives within a single tab/session and
+ * complements the HTTP `Cache-Control` headers set by API routes.
+ *
+ * Limitations (intentional, documented):
+ * - Not shared across tabs.
+ * - Cleared when the tab is closed or the JS context is replaced.
+ * - Not used during SSR — get() always returns null on the server.
+ *
+ * For cross-request caching prefer `Cache-Control` on the API route or a
+ * shared store (Redis/Upstash). This module is kept thin to avoid hiding
+ * stale data and to keep memory bounded per tab.
+ */
 interface CacheEntry<T> {
     data: T;
-    timestamp: number;
+    expiresAt: number;
+}
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+const store: Map<string, CacheEntry<unknown>> = new Map();
+
+function isClient(): boolean {
+    return typeof window !== 'undefined';
 }
 
 class PropertyCache {
-    private cache: Map<string, CacheEntry<any>> = new Map();
-    private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
     set<T>(key: string, data: T): void {
-        this.cache.set(key, {
-            data,
-            timestamp: Date.now(),
-        });
-        console.log(`✅ Cached data for key: ${key}`);
+        if (!isClient()) return;
+        store.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
     }
 
     get<T>(key: string): T | null {
-        const entry = this.cache.get(key);
-
-        if (!entry) {
-            console.log(`❌ No cache found for key: ${key}`);
+        if (!isClient()) return null;
+        const entry = store.get(key);
+        if (!entry) return null;
+        if (Date.now() > entry.expiresAt) {
+            store.delete(key);
             return null;
         }
-
-        const isExpired = Date.now() - entry.timestamp > this.CACHE_DURATION;
-
-        if (isExpired) {
-            console.log(`⏰ Cache expired for key: ${key}`);
-            this.cache.delete(key);
-            return null;
-        }
-
-        console.log(`✅ Using cached data for key: ${key}`);
         return entry.data as T;
     }
 
     clear(key?: string): void {
+        if (!isClient()) return;
         if (key) {
-            this.cache.delete(key);
-            console.log(`🗑️ Cleared cache for key: ${key}`);
+            store.delete(key);
         } else {
-            this.cache.clear();
-            console.log(`🗑️ Cleared all cache`);
+            store.clear();
         }
-    }
-
-    has(key: string): boolean {
-        const entry = this.cache.get(key);
-        if (!entry) return false;
-
-        const isExpired = Date.now() - entry.timestamp > this.CACHE_DURATION;
-        if (isExpired) {
-            this.cache.delete(key);
-            return false;
-        }
-
-        return true;
-    }
-
-    getAge(key: string): number | null {
-        const entry = this.cache.get(key);
-        if (!entry) return null;
-        return Date.now() - entry.timestamp;
     }
 }
 
-// Export singleton instance
 export const propertyCache = new PropertyCache();

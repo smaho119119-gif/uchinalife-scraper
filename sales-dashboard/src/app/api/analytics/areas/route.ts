@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase-server';
+import { jsonError, logAndSerializeError } from '@/lib/api-utils';
+
 export const revalidate = 300;
 
 export async function GET() {
@@ -10,8 +12,7 @@ export async function GET() {
         return NextResponse.json(data, {
             headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' },
         });
-    } catch (error: any) {
-        console.error('Error fetching area analytics:', error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    } catch (error) {
+        return jsonError(logAndSerializeError('analytics/areas', error));
     }
 }

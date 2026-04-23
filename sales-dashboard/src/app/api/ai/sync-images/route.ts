@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { supabase, getGeneratedImages } from '@/lib/supabase';
+import { enforceRateLimit } from '@/lib/auth-helpers';
 
 // テーブル名
 const TABLE_NAME = 'uchina_property_images';
 
 // ローカルの画像ファイルをSupabaseに同期するAPI
 export async function POST(request: Request) {
+    const limited = await enforceRateLimit(request, 'sync-images', 5, 60_000);
+    if (limited) return limited;
     try {
         const publicDir = path.join(process.cwd(), 'public', 'generated-images');
         

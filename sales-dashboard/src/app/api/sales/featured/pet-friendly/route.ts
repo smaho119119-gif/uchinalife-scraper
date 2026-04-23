@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase-server';
 import { safeParseJson } from '@/lib/json';
+import { isValidCategory } from '@/lib/categories';
+import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +12,8 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabase();
     const { searchParams } = new URL(request.url);
-    const categoryFilter = searchParams.get('category');
+    const rawCategory = searchParams.get('category');
+    const categoryFilter = rawCategory && isValidCategory(rawCategory) ? rawCategory : null;
 
     // Use Supabase JSONB filter to find pet-friendly properties directly
     let query = supabase
@@ -59,8 +62,7 @@ export async function GET(request: NextRequest) {
       { success: true, properties, total: properties.length },
       { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } },
     );
-  } catch (error: any) {
-    console.error('Error in pet-friendly API:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    return jsonError(logAndSerializeError('sales/featured/pet-friendly', error));
   }
 }

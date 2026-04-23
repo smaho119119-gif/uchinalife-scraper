@@ -3,6 +3,8 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ALL_CATEGORIES, isValidCategory } from '@/lib/categories';
+import { enforceRateLimit } from '@/lib/auth-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,27 +76,42 @@ export async function GET(request: NextRequest) {
 
 // POST: スクレイピングを実行
 export async function POST(request: NextRequest) {
+    // 1分あたり5回まで（誤クリック・連打耐性）
+    const limited = await enforceRateLimit(request, 'scraping', 5, 60_000);
+    if (limited) return limited;
     try {
         const body = await request.json();
-        const { action, categories, noDiff, forceRefresh } = body;
+        const { action, categories, noDiff, forceRefresh } = body ?? {};
 
         if (action === 'run') {
-            // 再スクレイピング時は--no-diffオプションを使用（全件スクレイピング）
-            // upsertで重複チェックが行われるため、既存データは更新され、新規データは追加される
+            // categories の allowlist 検証 — シェル注入の攻撃面を消す
+            let safeCategories: string[] | undefined;
+            if (Array.isArray(categories) && categories.length > 0) {
+                safeCategories = categories.filter(
+                    (c): c is string => typeof c === 'string' && isValidCategory(c),
+                );
+                if (safeCategories.length === 0) {
+                    return NextResponse.json(
+                        { error: '不正なカテゴリ指定です', allowed: ALL_CATEGORIES },
+                        { status: 400 },
+                    );
+                }
+            }
+
             const options = {
-                noDiff: noDiff !== false, // デフォルトでtrue（再スクレイピング時）
-                forceRefresh: forceRefresh === true, // デフォルトでfalse
+                noDiff: noDiff !== false,
+                forceRefresh: forceRefresh === true,
             };
-            return runScraping(categories, options);
+            return runScraping(safeCategories, options);
         } else if (action === 'stop') {
             return stopScraping();
         }
 
-        return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+        return NextResponse.json({ error: '不明なアクションです' }, { status: 400 });
     } catch (error) {
         console.error('Scraping execution error:', error);
         return NextResponse.json(
-            { error: 'Failed to execute scraping' },
+            { error: 'スクレイピング実行に失敗しました' },
             { status: 500 }
         );
     }

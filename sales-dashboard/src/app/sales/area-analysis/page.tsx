@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { Loader2, MapPin, BarChart3, DollarSign, Hash } from "lucide-react";
 import AreaStatsPanel from "@/components/sales/AreaStatsPanel";
 import type { CityStats } from "@/components/sales/ChoroplethMap";
+import { useApi } from "@/lib/use-api";
+import { ErrorBanner } from "@/components/ui/error-banner";
 
 // ---------------------------------------------------------------------------
 // Dynamic import — Leaflet cannot run on the server
@@ -46,42 +48,23 @@ const COLOR_MODES: { id: ColorMode; label: string; icon: typeof DollarSign }[] =
 // Page
 // ---------------------------------------------------------------------------
 
+interface AreaStatsResponse {
+  success: boolean;
+  cities: CityStats[];
+  totalProperties: number;
+}
+
 export default function AreaAnalysisPage() {
-  const [cities, setCities] = useState<CityStats[]>([]);
-  const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [colorMode, setColorMode] = useState<ColorMode>("avgPrice");
   const [selectedCity, setSelectedCity] = useState<CityStats | null>(null);
 
-  // Fetch area stats
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchData() {
-      setLoading(true);
-      try {
-        const params = new URLSearchParams();
-        if (typeFilter !== "all") {
-          params.set("type", typeFilter);
-        }
-        const res = await fetch(`/api/sales/area-stats?${params.toString()}`);
-        const data = await res.json();
-
-        if (!cancelled && data.success) {
-          setCities(data.cities);
-        }
-      } catch (err) {
-        console.error("Failed to fetch area stats:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    fetchData();
-    return () => {
-      cancelled = true;
-    };
-  }, [typeFilter]);
+  const { data, error, loading, refetch } = useApi<AreaStatsResponse>(
+    typeFilter === "all"
+      ? "/api/sales/area-stats"
+      : `/api/sales/area-stats?type=${typeFilter}`,
+  );
+  const cities = data?.cities ?? [];
 
   const handleCityClick = useCallback((city: CityStats) => {
     setSelectedCity(city);
@@ -93,6 +76,11 @@ export default function AreaAnalysisPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
+      {error && (
+        <div className="px-4 sm:px-6 pt-4">
+          <ErrorBanner message={error} onRetry={refetch} />
+        </div>
+      )}
       {/* Header */}
       <div className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4">

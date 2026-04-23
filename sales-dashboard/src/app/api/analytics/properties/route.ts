@@ -1,24 +1,40 @@
 import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase-server';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
+import { isValidCategory } from '@/lib/categories';
+import { parseIntParam, jsonError, logAndSerializeError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
+
+const JST = 'Asia/Tokyo';
+const ALLOWED_FILTERS = ['active', 'inactive', 'newToday', 'soldToday'] as const;
+type Filter = (typeof ALLOWED_FILTERS)[number];
+
+/** Returns the JST "today" boundary as a UTC ISO string. */
+function startOfTodayJSTAsUtc(): string {
+    const nowJst = toZonedTime(new Date(), JST);
+    const startOfDayJst = new Date(
+        nowJst.getFullYear(),
+        nowJst.getMonth(),
+        nowJst.getDate(),
+    );
+    return fromZonedTime(startOfDayJst, JST).toISOString();
+}
+
 export async function GET(request: Request) {
     try {
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-        if (!supabaseUrl || !supabaseKey) {
-            return NextResponse.json(
-                { error: 'Supabase configuration missing' },
-                { status: 500 }
-            );
-        }
-
         const supabase = getSupabase();
         const { searchParams } = new URL(request.url);
-        const filter = searchParams.get('filter'); // 'active', 'newToday', 'soldToday', 'inactive'
-        const category = searchParams.get('category'); // category ID
-        const limit = parseInt(searchParams.get('limit') || '50');
+        const rawFilter = searchParams.get('filter');
+        const rawCategory = searchParams.get('category');
+        const limit = parseIntParam(searchParams.get('limit'), 50, 1, 500);
+
+        const filter: Filter | null =
+            rawFilter && (ALLOWED_FILTERS as readonly string[]).includes(rawFilter)
+                ? (rawFilter as Filter)
+                : null;
+        const category =
+            rawCategory && isValidCategory(rawCategory) ? rawCategory : null;
 
         let query = supabase
             .from('properties')
@@ -26,46 +42,25 @@ export async function GET(request: Request) {
             .order('created_at', { ascending: false })
             .limit(limit);
 
-        // Apply filters
         if (filter === 'active') {
             query = query.eq('is_active', true);
         } else if (filter === 'inactive') {
             query = query.eq('is_active', false);
         } else if (filter === 'newToday') {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            query = query
-                .eq('is_active', true)
-                .gte('created_at', today.toISOString());
+            query = query.eq('is_active', true).gte('created_at', startOfTodayJSTAsUtc());
         } else if (filter === 'soldToday') {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            query = query
-                .eq('is_active', false)
-                .gte('updated_at', today.toISOString());
+            query = query.eq('is_active', false).gte('updated_at', startOfTodayJSTAsUtc());
         }
 
-        // Apply category filter
         if (category) {
             query = query.eq('category', category);
         }
 
         const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching properties:', error);
-            return NextResponse.json(
-                { error: 'Failed to fetch properties' },
-                { status: 500 }
-            );
-        }
+        if (error) throw error;
 
         return NextResponse.json({ properties: data || [] });
     } catch (error) {
-        console.error('Error fetching properties:', error);
-        return NextResponse.json(
-            { error: 'Failed to fetch properties' },
-            { status: 500 }
-        );
+        return jsonError(logAndSerializeError('analytics/properties', error));
     }
 }

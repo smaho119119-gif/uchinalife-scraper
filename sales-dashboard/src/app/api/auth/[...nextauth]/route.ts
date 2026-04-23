@@ -27,7 +27,14 @@ export const authOptions: AuthOptions = {
     pages: {
         signIn: '/login',
     },
-    session: { strategy: 'jwt' },
+    session: {
+        strategy: 'jwt',
+        maxAge: 60 * 60 * 8,    // 8 hours — fits an internal-tool workday
+        updateAge: 60 * 60,     // refresh token at most once per hour
+    },
+    jwt: {
+        maxAge: 60 * 60 * 8,
+    },
     callbacks: {
         async session({ session, token }) {
             if (session.user && token.sub) {

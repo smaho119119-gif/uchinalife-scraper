@@ -52,9 +52,14 @@ interface DayStats {
 // GET: カレンダー情報を取得
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
-    const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
-    const date = searchParams.get('date'); // YYYY-MM-DD形式
+    const now = new Date();
+    const yearRaw = parseInt(searchParams.get('year') || String(now.getFullYear()), 10);
+    const monthRaw = parseInt(searchParams.get('month') || String(now.getMonth() + 1), 10);
+    const year = Number.isFinite(yearRaw) ? Math.min(2099, Math.max(2020, yearRaw)) : now.getFullYear();
+    const month = Number.isFinite(monthRaw) ? Math.min(12, Math.max(1, monthRaw)) : now.getMonth() + 1;
+    const dateRaw = searchParams.get('date');
+    // Strict YYYY-MM-DD validation
+    const date = dateRaw && /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : null;
 
     try {
         if (date) {

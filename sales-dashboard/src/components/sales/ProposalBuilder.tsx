@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   FileText,
   Eye,
@@ -117,8 +118,18 @@ export default function ProposalBuilder({ onPreview }: Props) {
     setSelectedUrls(newUrls);
   };
 
+  const [pendingRemoveUrl, setPendingRemoveUrl] = useState<string | null>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+
   const removeProperty = (url: string) => {
-    setSelectedUrls((prev) => prev.filter((u) => u !== url));
+    setPendingRemoveUrl(url);
+  };
+
+  const confirmRemoveProperty = () => {
+    if (pendingRemoveUrl) {
+      setSelectedUrls((prev) => prev.filter((u) => u !== pendingRemoveUrl));
+    }
+    setPendingRemoveUrl(null);
   };
 
   const handlePreview = () => {
@@ -131,7 +142,9 @@ export default function ProposalBuilder({ onPreview }: Props) {
     });
   };
 
-  const handleClearDraft = () => {
+  const handleClearDraft = () => setClearConfirmOpen(true);
+
+  const confirmClearDraft = () => {
     setClientName("");
     setClientCompany("");
     setNotes("");
@@ -144,6 +157,24 @@ export default function ProposalBuilder({ onPreview }: Props) {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={pendingRemoveUrl !== null}
+        onOpenChange={(open) => { if (!open) setPendingRemoveUrl(null); }}
+        title="物件を削除しますか？"
+        description="提案リストからこの物件を取り除きます。再度追加するには物件を選び直す必要があります。"
+        confirmLabel="削除"
+        destructive
+        onConfirm={confirmRemoveProperty}
+      />
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        onOpenChange={setClearConfirmOpen}
+        title="下書きをすべて削除しますか？"
+        description="顧客情報・選択中の物件・メモなど、提案書の下書きをすべて削除します。この操作は取り消せません。"
+        confirmLabel="すべて削除"
+        destructive
+        onConfirm={confirmClearDraft}
+      />
       {/* Client info */}
       <Card className="bg-slate-900/80 border-slate-800 backdrop-blur-sm">
         <CardHeader className="pb-3">

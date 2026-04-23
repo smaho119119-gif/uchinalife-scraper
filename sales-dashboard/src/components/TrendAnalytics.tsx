@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingUp, TrendingDown, Activity, Calendar } from 'lucide-react';
+import { useApi } from '@/lib/use-api';
+import { ErrorBanner } from '@/components/ui/error-banner';
 
 interface TrendData {
     date: string;
@@ -23,32 +25,27 @@ interface TrendSummary {
     growthRate: number;
 }
 
+interface TrendsResponse {
+    success: boolean;
+    summary: TrendSummary;
+    trends: TrendData[];
+}
+
 export default function TrendAnalytics() {
-    const [trends, setTrends] = useState<TrendData[]>([]);
-    const [summary, setSummary] = useState<TrendSummary | null>(null);
     const [period, setPeriod] = useState(30);
-    const [loading, setLoading] = useState(true);
+    const { data, error, loading, refetch } = useApi<TrendsResponse>(
+        `/api/analytics/trends?days=${period}`,
+    );
+    const trends = data?.trends ?? [];
+    const summary = data?.summary ?? null;
 
-    useEffect(() => {
-        fetchTrendData();
-    }, [period]);
-
-    const fetchTrendData = async () => {
-        setLoading(true);
-        try {
-            const response = await fetch(`/api/analytics/trends?days=${period}`);
-            const data = await response.json();
-
-            if (data.success) {
-                setTrends(data.trends);
-                setSummary(data.summary);
-            }
-        } catch (error) {
-            console.error('Error fetching trend data:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    if (error) {
+        return (
+            <div className="p-4">
+                <ErrorBanner message={error} onRetry={refetch} />
+            </div>
+        );
+    }
 
     if (loading) {
         return <div className="text-white p-8">読み込み中...</div>;

@@ -2219,9 +2219,9 @@ SCRAPER_RETRY_DELAY=2       # リトライ待機秒数`}</pre>
                                 >
                                     <X className="h-6 w-6 text-white" />
                                 </button>
-                                <img 
-                                    src={selectedGalleryImage} 
-                                    alt="Preview" 
+                                <img
+                                    src={selectedGalleryImage}
+                                    alt="生成画像のプレビュー"
                                     className="max-w-full max-h-[90vh] object-contain rounded-lg"
                                     onClick={(e) => e.stopPropagation()}
                                 />

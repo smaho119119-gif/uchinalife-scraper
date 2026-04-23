@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase-server';
 import { getCityCoordinates, getRegionFull } from '@/lib/area';
+import { isValidCategory } from '@/lib/categories';
+import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
 export const revalidate = 300;
 
+const ALLOWED_TYPES = ['rent', 'sale', 'all'] as const;
+type AllowedType = (typeof ALLOWED_TYPES)[number];
+
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
-        const category = searchParams.get('category') || '';
-        const type = searchParams.get('type') || 'all';
+        const rawCategory = searchParams.get('category') || '';
+        const rawType = searchParams.get('type') || 'all';
+
+        const category = rawCategory && isValidCategory(rawCategory) ? rawCategory : '';
+        const type: AllowedType = (ALLOWED_TYPES as readonly string[]).includes(rawType)
+            ? (rawType as AllowedType)
+            : 'all';
 
         const supabase = getSupabase();
         const { data, error } = await supabase.rpc('area_stats', {
@@ -19,10 +29,11 @@ export async function GET(request: NextRequest) {
         });
         if (error) throw error;
 
-        const cities = ((data?.cities as any[]) || [])
+        const cities = ((data?.cities as Array<Record<string, unknown>>) || [])
             .map((c) => {
-                const coordinates = getCityCoordinates(c.name);
-                const region = getRegionFull(c.name);
+                const name = String(c.name ?? '');
+                const coordinates = getCityCoordinates(name);
+                const region = getRegionFull(name);
                 return {
                     ...c,
                     coordinates: coordinates || [0, 0],
@@ -39,8 +50,7 @@ export async function GET(request: NextRequest) {
             },
             { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' } },
         );
-    } catch (error: any) {
-        console.error('Error in area-stats:', error);
-        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    } catch (error) {
+        return jsonError(logAndSerializeError('sales/area-stats', error));
     }
 }

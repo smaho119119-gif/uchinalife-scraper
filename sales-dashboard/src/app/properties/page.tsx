@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
+import { useApi } from '@/lib/use-api';
+import { ErrorBanner } from '@/components/ui/error-banner';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -86,8 +88,10 @@ function formatPrice(value: number): string {
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 500];
 
 export default function PropertiesPage() {
-    const [properties, setProperties] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: fetchedProperties, error: fetchError, loading, refetch } = useApi<any[]>(
+        '/api/properties?limit=50000',
+    );
+    const properties = fetchedProperties ?? [];
     const [searchTerm, setSearchTerm] = useState("");
     
     // フィルター状態
@@ -101,14 +105,7 @@ export default function PropertiesPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(100);
 
-    useEffect(() => {
-        fetch('/api/properties?limit=50000')
-            .then(res => res.json())
-            .then(data => {
-                setProperties(data);
-                setLoading(false);
-            });
-    }, []);
+    // データ取得は useApi に集約。AbortController + error handling 付き。
 
     // カテゴリを全て取得
     const allCategoryIds = useMemo(() => 
@@ -307,6 +304,7 @@ export default function PropertiesPage() {
 
     return (
         <div className="flex-1 space-y-4 p-8 pt-6 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 min-h-screen text-slate-100">
+            {fetchError && <ErrorBanner message={fetchError} onRetry={refetch} />}
             {/* ヘッダー */}
             <div className="flex items-center justify-between">
                 <div>
