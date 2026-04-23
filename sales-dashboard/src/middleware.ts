@@ -12,7 +12,17 @@ import { getToken } from 'next-auth/jwt';
  * silently public). Read-only public APIs (stats, analytics, sales/featured)
  * are intentionally accessible to anonymous users to keep CDN caching effective.
  */
-const PUBLIC_PAGE_PREFIXES = ['/sales/featured'];
+const PUBLIC_PAGE_PREFIXES = [
+    '/sales/featured',
+    '/api/sales/featured',
+    // Read-only stats APIs are intentionally public so the homepage and
+    // featured pages can render without an auth round-trip.
+    '/api/stats',
+    '/api/analytics',
+    '/api/sales/area-stats',
+    '/api/sales/market-price',
+    '/api/properties/locations',
+];
 
 function isPublicPath(pathname: string): boolean {
     return PUBLIC_PAGE_PREFIXES.some((p) => pathname.startsWith(p));
