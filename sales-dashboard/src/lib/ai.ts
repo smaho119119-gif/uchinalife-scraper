@@ -12,6 +12,10 @@ import {
     buildStandardImagePrompt,
     buildCollageImagePrompt,
     isCollageTemplate,
+    buildBusinessDocumentPrompt,
+    buildInfographicPrompt,
+    buildStaffOnlyPrompt,
+    buildDefaultImagePrompt,
 } from "@/prompts/property-image";
 import { getStandardModeInstructions } from "@/prompts/property-image-modes";
 
@@ -180,344 +184,36 @@ export async function generatePropertyImageWithPhotos(options: {
                 aspectRatio: options.aspectRatio,
             });
         }
-        // ビジネス資料モード（インフォグラフィック）
         else if (options.mode === 'document' && options.style === 'business') {
             console.log('Using business document prompt');
-            prompt = `
-日本語のビジネス提案書スタイルの不動産インフォグラフィックを作成してください。
-1枚で全ての物件情報が伝わる、プロフェッショナルな資料デザインです。
-
-═══════════════════════════════════════════
-【物件データ】
-═══════════════════════════════════════════
-物件名: ${propertyDetails.title}
-家賃: ${propertyDetails.price}
-敷金/礼金: ${propertyDetails.deposit}
-間取り: ${propertyDetails.layout}
-所在地: ${propertyDetails.address}
-駐車場: ${propertyDetails.parking}
-ペット: ${propertyDetails.pet}
-建物構造: ${propertyDetails.building}
-セキュリティ: ${propertyDetails.security}
-設備: ${propertyDetails.equipment}
-バス・トイレ: ${propertyDetails.bath}
-キッチン: ${propertyDetails.kitchen}
-収納: ${propertyDetails.storage}
-インターネット: ${propertyDetails.internet}
-不動産会社: ${propertyDetails.company}
-
-═══════════════════════════════════════════
-【インフォグラフィックレイアウト】
-═══════════════════════════════════════════
-
-┌─────────────────────────────────────────┐
-│  【ヘッダー】紺色背景                      │
-│  🏠 ${propertyDetails.title}             │
-│  💰 ${propertyDetails.price} ←目立つ大文字 │
-└─────────────────────────────────────────┘
-         │
-┌────────┴────────┬──────────────────────┐
-│                 │                      │
-│  【メイン写真】   │  【基本情報カード】    │
-│  物件外観/内観   │  ┌────────────────┐  │
-│                 │  │🏠 間取り        │  │
-│                 │  │${propertyDetails.layout}│
-│                 │  ├────────────────┤  │
-│                 │  │📍 所在地        │  │
-│                 │  │${propertyDetails.address}│
-│                 │  ├────────────────┤  │
-│                 │  │🚗 駐車場        │  │
-│                 │  │${propertyDetails.parking}│
-│                 │  └────────────────┘  │
-├─────────────────┴──────────────────────┤
-│  【設備・特徴アイコン】横並び              │
-│  🔐セキュリティ  🐕ペット  🍳キッチン      │
-│  🛁バストイレ   📺インターネット           │
-├────────────────────────────────────────┤
-│  【費用詳細】3カラム                      │
-│  敷金 │ 礼金 │ 仲介手数料                │
-├────────────────────────────────────────┤
-│  【フッター】                            │
-│  🏢 ${propertyDetails.company}          │
-│  📞 お問い合わせはこちら [ボタン]         │
-└────────────────────────────────────────┘
-
-═══════════════════════════════════════════
-【デザイン仕様】
-═══════════════════════════════════════════
-- カラースキーム: 
-  - メイン: 紺色 (#1e3a5f)
-  - アクセント: 黄色 (#ffd700)、水色 (#87ceeb)
-  - 背景: 白 (#ffffff)
-  - テキスト: 濃い灰色 (#333333)
-
-- アイコン: 各情報項目にアイコンを付与
-- カード: 情報をカード形式でグループ化
-- 矢印/フロー: 情報の流れを視覚化
-- バッジ: 「おすすめ」「新着」などのラベル
-
-- フォント: 
-  - タイトル: 太字、大きめ
-  - 本文: 読みやすい標準サイズ
-  - 価格: 最も目立つサイズ
-
-- 視覚的要素:
-  - グラデーション背景（微妙に）
-  - ドロップシャドウ（カードに深み）
-  - 区切り線（セクション分け）
-
-═══════════════════════════════════════════
-【必須表示文字（正確に日本語で）】
-═══════════════════════════════════════════
-「${propertyDetails.title}」
-「${propertyDetails.price}」
-「${propertyDetails.layout}」
-「${propertyDetails.address}」
-「${propertyDetails.parking}」
-「${propertyDetails.deposit}」
-「${propertyDetails.company}」
-「お問い合わせはこちら」
-
-【重要】
-- 全テキストは正確な日本語で表示
-- 文字化けや崩れなし
-- プロフェッショナルなビジネス資料品質
-- 印刷しても読みやすいデザイン
-- アスペクト比: ${options.aspectRatio}
-${options.staffPhoto ? `
-【スタッフ写真の加工・配置】
-- 提供されたスタッフ写真を「案内ポーズ」に加工
-- 手を物件写真の方向に差し出し、案内している雰囲気に
-- 明るい笑顔で親しみやすい表情（必ず笑顔にする）
-- 歯を見せた自然な笑顔で物件を紹介しているポーズ
-- 右下に配置、円形フレームで囲む
-- 吹き出しでコメント追加` : ''}
-`;
+            prompt = buildBusinessDocumentPrompt({
+                propertyDetails,
+                aspectRatio: options.aspectRatio,
+                hasStaffPhoto: !!options.staffPhoto,
+            });
         } else if (options.mode === 'infographic') {
-            // インフォグラフィック専用モード
             console.log('Using infographic prompt');
-            prompt = `
-日本語の不動産インフォグラフィックを作成してください。
-ビジネス提案書や紙資料に使える、1枚で全情報が伝わるプロフェッショナルなデザインです。
-
-════════════════════════════════════════════════════════════
-【物件データ（全て画像に含める）】
-════════════════════════════════════════════════════════════
-🏠 物件名: ${propertyDetails.title}
-💰 家賃: ${propertyDetails.price}
-📝 敷金/礼金: ${propertyDetails.deposit}
-🏠 間取り: ${propertyDetails.layout}
-📍 所在地: ${propertyDetails.address}
-🚗 駐車場: ${propertyDetails.parking}
-🐕 ペット: ${propertyDetails.pet}
-🏗️ 建物構造: ${propertyDetails.building}
-🔐 セキュリティ: ${propertyDetails.security}
-📺 設備: ${propertyDetails.equipment}
-🛁 バス・トイレ: ${propertyDetails.bath}
-🍳 キッチン: ${propertyDetails.kitchen}
-📦 収納: ${propertyDetails.storage}
-🌐 ネット: ${propertyDetails.internet}
-🏢 不動産会社: ${propertyDetails.company}
-
-════════════════════════════════════════════════════════════
-【インフォグラフィック構成】
-════════════════════════════════════════════════════════════
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃  【ヘッダーセクション】                                ┃
-┃  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ┃
-┃  物件名: ${propertyDetails.title}                    ┃
-┃  ★ ${propertyDetails.price} ★ ←最大サイズ、黄色背景  ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-              ↓
-┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃                  ┃                                  ┃
-┃  【物件写真】     ┃  【物件スペック】                  ┃
-┃                  ┃  ┌──────────────────────────┐   ┃
-┃  提供された写真   ┃  │ 🏠 ${propertyDetails.layout}│   ┃
-┃  を大きく配置    ┃  │ 📍 ${propertyDetails.address}│  ┃
-┃                  ┃  │ 🚗 ${propertyDetails.parking}│  ┃
-┃                  ┃  │ 🐕 ${propertyDetails.pet}   │   ┃
-┃                  ┃  └──────────────────────────┘   ┃
-┃                  ┃                                  ┃
-┗━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-              ↓
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃  【設備・特徴セクション】アイコン付きグリッド         ┃
-┃  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐          ┃
-┃  │🔐  │ │🛁  │ │🍳  │ │📺  │ │📦  │          ┃
-┃  │セキュ│ │バス │ │キッチ│ │ネット│ │収納 │          ┃
-┃  └────┘ └────┘ └────┘ └────┘ └────┘          ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-              ↓
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃  【費用詳細セクション】3カラム比較表                  ┃
-┃  ┌──────┐  ┌──────┐  ┌──────┐                  ┃
-┃  │ 敷金  │  │ 礼金  │  │ 手数料 │                  ┃
-┃  │${propertyDetails.deposit}│                       ┃
-┃  └──────┘  └──────┘  └──────┘                  ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-              ↓
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃  【フッター】                                       ┃
-┃  🏢 ${propertyDetails.company}                     ┃
-┃  ┌─────────────────────────────────────────┐      ┃
-┃  │  📞 お問い合わせはこちら  →              │      ┃
-┃  └─────────────────────────────────────────┘      ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-
-════════════════════════════════════════════════════════════
-【デザイン仕様】
-════════════════════════════════════════════════════════════
-カラーパレット:
-- プライマリ: 紺色 (#1a365d)
-- セカンダリ: 水色 (#63b3ed)
-- アクセント: 黄色/ゴールド (#f6e05e)
-- 背景: 白/薄いグレー (#f7fafc)
-- テキスト: ダークグレー (#2d3748)
-
-デザイン要素:
-- 各セクションは角丸のカードで囲む
-- アイコンは円形背景付き
-- 矢印やフローラインで情報の流れを表現
-- グラデーション背景（微妙に）
-- 適度な余白とパディング
-- 影効果でカードに深みを出す
-
-フォント:
-- タイトル: 太字、24-32pt相当
-- 価格: 最大、太字、36-48pt相当、アクセントカラー
-- 本文: 12-14pt相当、読みやすさ重視
-- ラベル: 10-12pt相当、グレー
-
-════════════════════════════════════════════════════════════
-【必須表示テキスト（正確に日本語で）】
-════════════════════════════════════════════════════════════
-「${propertyDetails.title}」
-「${propertyDetails.price}」
-「${propertyDetails.layout}」
-「${propertyDetails.address}」
-「${propertyDetails.parking}」
-「${propertyDetails.deposit}」
-「${propertyDetails.company}」
-「お問い合わせはこちら」
-
-【重要な指示】
-- 全てのテキストは正確な日本語で表示すること
-- 文字化け、崩れ、誤字は絶対に避ける
-- ビジネス資料として印刷可能な品質
-- 情報の階層が明確に分かるデザイン
-- 1枚で物件の全てが分かる完結したデザイン
-- アスペクト比: ${options.aspectRatio}
-${options.staffPhoto ? `
-【スタッフ写真の加工・配置】
-- 提供されたスタッフ写真を「案内ポーズ」に加工
-- 手を物件写真の方向に差し出し、案内している雰囲気に
-- 明るい笑顔で親しみやすい表情（必ず笑顔にする）
-- 歯を見せた自然な笑顔で物件を紹介しているポーズ
-- フッター付近に配置、円形フレームで囲む
-- 吹き出しで「おすすめです！」などのコメント` : ''}
-`;
+            prompt = buildInfographicPrompt({
+                propertyDetails,
+                aspectRatio: options.aspectRatio,
+                hasStaffPhoto: !!options.staffPhoto,
+            });
         } else if (options.staffPhoto) {
             console.log('Using staff photo prompt');
-            prompt = `
-1枚で物件紹介ができる不動産マーケティング画像を作成してください。
-スタッフが物件を紹介するスタイルで。
-
-【物件情報（全て画像に含める）】
-📍 物件名: ${propertyDetails.title}
-💰 家賃: ${propertyDetails.price}
-🏠 間取り: ${propertyDetails.layout}
-📍 所在地: ${propertyDetails.address}
-🚗 駐車場: ${propertyDetails.parking}
-🐕 ペット: ${propertyDetails.pet}
-🏢 不動産会社: ${propertyDetails.company}
-
-【レイアウト】
-- 左側または背景: 物件写真${options.propertyImages.length > 1 ? `（提供された${options.propertyImages.length}枚全てを使用）` : ''}
-- 右下: スタッフ写真（円形フレーム、白い縁取り）
-- スタッフの吹き出しに物件の魅力を表すコメントを生成
-- 上部: 物件名と家賃（大きく目立つ）
-- 中央または側面: 物件情報リスト
-- 下部: 「お問い合わせはこちら」ボタン
-
-【スタッフ写真の加工 - 最重要】
-提供されたスタッフ写真を以下のように加工してください：
-- スタッフが「物件を案内している」雰囲気に加工
-- 手を物件写真の方向に差し出し、案内しているポーズに変更
-- 「こちらの物件をご紹介します」と言っているような自然なポーズ
-- 明るい笑顔で親しみやすい表情（必ず笑顔にする）
-- 歯を見せた自然な笑顔が望ましい
-- 不動産営業スタッフとして物件を紹介している雰囲気
-
-【吹き出しコメント - AIで生成】
-物件の特徴を分析して、魅力的な一言コメントを日本語で生成してください（10文字以内）
-例：
-- 駐車場${propertyDetails.parking} → 「駐車場広々！」
-- ペット${propertyDetails.pet} → 「ペットOK！」
-- 価格がお得 → 「お得な物件！」
-- 立地が良い → 「便利な立地！」
-
-【表示する文字（正確に日本語で）】
-- 「${propertyDetails.title}」
-- 「${propertyDetails.price}」（最も目立つように）
-- 「${propertyDetails.layout}」
-- 「${propertyDetails.parking}」
-- 「お問い合わせはこちら」
-- スタッフ吹き出し: 物件の特徴に基づいた短いコメント
-
-【スタイル】
-${getStyleDescription(options.style)}
-アスペクト比: ${options.aspectRatio}
-
-【重要】
-- 全てのテキストは正確な日本語で表示
-- 1枚で物件の魅力が伝わるデザイン
-- スタッフ写真は「案内ポーズ」に加工（手を差し出して物件を紹介している雰囲気）
-- スタッフの吹き出しには物件の魅力を表す短いコメントを生成
-${options.propertyImages.length > 1 ? `- 提供された${options.propertyImages.length}枚の物件写真を全て使用` : ''}
-`;
+            prompt = buildStaffOnlyPrompt({
+                propertyDetails,
+                propertyImageCount: options.propertyImages.length,
+                styleDescription: getStyleDescription(options.style),
+                aspectRatio: options.aspectRatio,
+            });
         } else {
             console.log('Using default prompt');
-            prompt = `
-1枚で物件紹介ができる不動産マーケティング画像を作成してください。
-
-【物件情報（全て画像に含める）】
-📍 物件名: ${propertyDetails.title}
-💰 家賃: ${propertyDetails.price}
-🏠 間取り: ${propertyDetails.layout}
-📍 所在地: ${propertyDetails.address}
-🚗 駐車場: ${propertyDetails.parking}
-🐕 ペット: ${propertyDetails.pet}
-
-【主要ポイント】
-${highlights.join('\n')}
-
-【レイアウト】
-- 背景: 物件写真（提供された画像を使用）
-- 上部: 物件名（大きく目立つ白文字、影付き）
-- 中央: 家賃（最も目立つ、バッジまたはリボン風）
-- 下部または側面: 物件詳細（間取り、駐車場など）
-- 最下部: 「お問い合わせはこちら」ボタン
-
-【表示する文字（正確に日本語で）】
-- 「${propertyDetails.title}」（タイトル）
-- 「${propertyDetails.price}」（家賃、最も大きく）
-- 「${propertyDetails.layout}」（間取り）
-- 「駐車場 ${propertyDetails.parking}」
-- 「お問い合わせはこちら」（CTAボタン）
-
-【スタイル】
-${getStyleDescription(options.style)}
-- プロフェッショナルな不動産広告デザイン
-- 読みやすいフォント
-- アスペクト比: ${options.aspectRatio}
-
-【重要】
-- 全てのテキストは正確な日本語で表示すること
-- 文字が読みやすいようにコントラストを確保
-- 1枚で物件の魅力が全て伝わるデザイン
-`;
+            prompt = buildDefaultImagePrompt({
+                propertyDetails,
+                highlights,
+                styleDescription: getStyleDescription(options.style),
+                aspectRatio: options.aspectRatio,
+            });
         }
 
         prompt += `\n\n画像仕様: ${options.size}解像度、${options.aspectRatio}アスペクト比。`;
