@@ -41,7 +41,6 @@ export async function GET(request: Request) {
                     timestamp: new Date(img.created_at).getTime()
                 }));
                 
-            console.log(`Found ${formattedImages.length} images for property: ${propertyUrl.substring(0, 50)}...`);
         } catch (dbError) {
             console.error('Supabase fetch failed:', dbError);
         }

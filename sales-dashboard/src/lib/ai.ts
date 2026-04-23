@@ -145,13 +145,11 @@ export async function generatePropertyImageWithPhotos(options: {
 
         const template = options.template || 'standard';
         
-        console.log(`Processing template: ${template}, mode: ${options.mode}, hasStaffPhoto: ${!!options.staffPhoto}`);
 
         // ===== 提案書テンプレート（紙資料用） =====
         if (template.startsWith('proposal_')) {
             const proposalType = parseProposalTemplate(template);
             if (proposalType) {
-                console.log(`Using proposal template prompt: ${proposalType}`);
                 prompt = buildProposalImagePrompt({
                     template: proposalType,
                     propertyDetails,
@@ -163,7 +161,6 @@ export async function generatePropertyImageWithPhotos(options: {
         }
         // ===== スタンダードテンプレート（モード別処理） =====
         else if (template === 'standard') {
-            console.log(`Using standard template with mode: ${options.mode}`);
             prompt = buildStandardImagePrompt({
                 propertyDetails,
                 modeInstructions: getStandardModeInstructions(options.mode),
@@ -175,7 +172,6 @@ export async function generatePropertyImageWithPhotos(options: {
         }
         // ===== コラージュ・雑誌風・オーバーレイテンプレート =====
         else if (isCollageTemplate(template)) {
-            console.log(`Using ${template} template prompt`);
             prompt = buildCollageImagePrompt({
                 template,
                 propertyDetails,
@@ -186,21 +182,18 @@ export async function generatePropertyImageWithPhotos(options: {
             });
         }
         else if (options.mode === 'document' && options.style === 'business') {
-            console.log('Using business document prompt');
             prompt = buildBusinessDocumentPrompt({
                 propertyDetails,
                 aspectRatio: options.aspectRatio,
                 hasStaffPhoto: !!options.staffPhoto,
             });
         } else if (options.mode === 'infographic') {
-            console.log('Using infographic prompt');
             prompt = buildInfographicPrompt({
                 propertyDetails,
                 aspectRatio: options.aspectRatio,
                 hasStaffPhoto: !!options.staffPhoto,
             });
         } else if (options.staffPhoto) {
-            console.log('Using staff photo prompt');
             prompt = buildStaffOnlyPrompt({
                 propertyDetails,
                 propertyImageCount: options.propertyImages.length,
@@ -208,7 +201,6 @@ export async function generatePropertyImageWithPhotos(options: {
                 aspectRatio: options.aspectRatio,
             });
         } else {
-            console.log('Using default prompt');
             prompt = buildDefaultImagePrompt({
                 propertyDetails,
                 highlights,
@@ -226,7 +218,6 @@ export async function generatePropertyImageWithPhotos(options: {
         const parts: GeminiPart[] = [{ text: prompt }];
 
         // Add property images
-        console.log(`Adding ${options.propertyImages.length} property images to prompt`);
         for (const img of options.propertyImages) {
             parts.push({
                 inlineData: {
@@ -238,7 +229,6 @@ export async function generatePropertyImageWithPhotos(options: {
 
         // Add staff photo if provided
         if (options.staffPhoto) {
-            console.log('Adding staff photo to prompt');
             parts.push({
                 inlineData: {
                     data: options.staffPhoto.data,
@@ -247,7 +237,6 @@ export async function generatePropertyImageWithPhotos(options: {
             });
         }
 
-        console.log(`Using model: ${modelConfig.name} (${modelConfig.id})`);
         
         // 古いSDKでの呼び出し
         const result = await model.generateContent({

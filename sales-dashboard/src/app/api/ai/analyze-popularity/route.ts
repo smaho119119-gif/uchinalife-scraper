@@ -379,7 +379,6 @@ ${popularPoints.length > 0 ? popularPoints.join('\n') : '特記事項なし'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-        console.log(`Generating popularity analysis with model: ${modelKey}`);
 
         let analysis = '';
         let actualModelUsed = modelConfig.name;
@@ -393,7 +392,6 @@ ${popularPoints.length > 0 ? popularPoints.join('\n') : '特記事項なし'}
         
         for (const fallbackModel of fallbackModels) {
             try {
-                console.log(`Trying model: ${fallbackModel.name}`);
                 
                 if (fallbackModel.provider === 'openai') {
                     const response = await openai.chat.completions.create({
@@ -410,7 +408,6 @@ ${popularPoints.length > 0 ? popularPoints.join('\n') : '特記事項なし'}
                 }
                 
                 actualModelUsed = fallbackModel.name as typeof actualModelUsed;
-                console.log(`Successfully generated with: ${actualModelUsed}`);
                 break; // 成功したらループを抜ける
                 
             } catch (modelError: unknown) {
@@ -418,7 +415,6 @@ ${popularPoints.length > 0 ? popularPoints.join('\n') : '特記事項なし'}
                 console.error(`Model ${fallbackModel.name} failed:`, errObj.message || modelError);
                 // 503エラーまたはモデルオーバーロードの場合は次のモデルを試す
                 if (errObj.status === 503 || errObj.message?.includes('overloaded')) {
-                    console.log(`Model ${fallbackModel.name} is overloaded, trying next fallback...`);
                     continue;
                 }
                 // それ以外のエラーは次のモデルを試す

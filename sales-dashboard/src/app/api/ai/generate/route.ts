@@ -30,7 +30,6 @@ export async function POST(request: Request) {
             property_data: safeParseJson(property.property_data),
         };
 
-        console.log(`Generating sales copy with model: ${modelKey}`);
         const copy = await generateSalesCopy(propertyData, modelKey);
 
         // Save to database

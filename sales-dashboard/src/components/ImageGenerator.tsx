@@ -84,7 +84,6 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
 
                 if (data.images && Array.isArray(data.images)) {
                     setImageGallery(data.images);
-                    console.log(`Loaded ${data.images.length} generated images from database`);
                 }
             } catch (e) {
                 console.error('Failed to load generated images:', e);
@@ -132,7 +131,6 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                             ? `${window.location.origin}${photoUrl}` 
                             : photoUrl;
                         formData.append('staffPhotoUrl', fullUrl);
-                        console.log('Sending staff photo URL:', fullUrl);
                     } else if (photoUrl.startsWith('data:')) {
                         // まだbase64の場合（古いデータ）はスキップして警告
                         console.warn('Staff photo is still in base64 format. Please re-upload.');
@@ -140,14 +138,11 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                 }
             }
 
-            console.log('Sending request to /api/ai/generate-image...');
             const res = await fetch('/api/ai/generate-image', {
                 method: 'POST',
                 body: formData,
             });
-            console.log('Response received:', res.status);
             const data = await res.json();
-            console.log('API Response:', data); // デバッグ用
 
             if (data.imageUrl) {
                 // 直接新しい画像をギャラリーに追加（即時反映）
@@ -157,11 +152,8 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                     style: imageStyle,
                     timestamp: Date.now()
                 };
-                console.log('Adding new image to gallery:', newImage); // デバッグ用
                 setImageGallery(prev => {
-                    console.log('Previous gallery:', prev.length, 'items'); // デバッグ用
                     const updated = [newImage, ...prev];
-                    console.log('Updated gallery:', updated.length, 'items'); // デバッグ用
                     return updated;
                 });
             } else if (data.error) {
@@ -181,14 +173,11 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
     };
 
     const handleStaffPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        console.log('handleStaffPhotoUpload called', e.target.files);
         const file = e.target.files?.[0];
         if (file) {
-            console.log('File selected:', file.name);
             setStaffPhotoFile(file);
             const reader = new FileReader();
             reader.onloadend = async () => {
-                console.log('File read complete');
                 const dataUrl = reader.result as string;
                 
                 // 新しいスタッフ写真をデータベースに保存
@@ -211,7 +200,6 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                     });
                     
                     if (res.ok) {
-                        console.log('Staff photo saved to database');
                         setSavedStaffPhotos(prev => [...prev, newPhoto]);
                         setSelectedStaffId(newPhoto.id);
                         setStaffPhoto(dataUrl);
@@ -227,7 +215,6 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
             };
             reader.readAsDataURL(file);
         } else {
-            console.log('No file selected');
         }
         // inputをリセット（同じファイルを再度選択可能にする）
         e.target.value = '';
@@ -426,7 +413,6 @@ export function ImageGenerator({ propertyUrl, propertyImages }: ImageGeneratorPr
                     <button
                         type="button"
                         onClick={() => {
-                            console.log('Add button clicked');
                             fileInputRef.current?.click();
                         }}
                         className="text-xs text-emerald-500 hover:text-emerald-400 cursor-pointer bg-transparent border-none"

@@ -62,7 +62,6 @@ export default function AdminPage() {
                 return;
             }
             const data = await res.json();
-            console.log('Stats data received:', data);
             setStats(data);
         } catch (error) {
             console.error('Failed to fetch stats:', error);

@@ -42,7 +42,6 @@ export async function POST(request: Request) {
 
         // Parse selected property images
         const selectedPropertyImages = propertyImagesJson ? JSON.parse(propertyImagesJson) : [];
-        console.log(`Selected property images: ${selectedPropertyImages.length} 枚`);
 
         // Download property images and convert to base64
         const propertyImageBuffers: Array<{ data: string, mimeType: string }> = [];
@@ -58,19 +57,16 @@ export async function POST(request: Request) {
                     data: base64,
                     mimeType
                 });
-                console.log(`Downloaded image: ${imageUrl.substring(0, 50)}...`);
             } catch (error) {
                 console.error(`Failed to download image: ${imageUrl}`, error);
             }
         }
-        console.log(`Successfully downloaded: ${propertyImageBuffers.length} 枚`);
 
         // Handle staff photo
         let staffPhotoBase64: { data: string, mimeType: string } | null = null;
         const staffPhotoUrl = formData.get('staffPhotoUrl') as string | null;
 
         if (staffPhotoUrl) {
-            console.log('Loading staff photo:', staffPhotoUrl);
             try {
                 // If local path in public folder on Vercel, we can try to read it via fs if it exists in the build,
                 // OR better, since it's a URL (potentially relative), construct a full URL or map to fs
@@ -91,7 +87,6 @@ export async function POST(request: Request) {
                         } else {
                             // If file doesn't exist locally (e.g. dynamic upload not persisted), 
                             // we can't do much. Assume failure or try to fetch if it was a full URL?
-                            console.log('Local staff photo not found (expected in Vercel/NextJS for static assets):', filepath);
                         }
                     }
                 } else {
@@ -123,7 +118,6 @@ export async function POST(request: Request) {
         }
 
         // Generate image with selected AI model
-        console.log(`Generating image with model: ${modelKey}, template: ${template}`);
         const result = await generatePropertyImageWithPhotos({
             propertyData,
             propertyImages: propertyImageBuffers,
@@ -185,7 +179,6 @@ export async function POST(request: Request) {
                 aspectRatio
             });
 
-            console.log(`Saved generated image to Supabase for property: ${url}`);
         } catch (dbError) {
             console.error('Failed to save to Supabase:', dbError);
         }

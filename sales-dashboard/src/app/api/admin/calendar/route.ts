@@ -90,7 +90,6 @@ export async function GET(request: NextRequest) {
 
             // キャッシュが有効な場合はキャッシュを返す
             if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-                console.log(`[Calendar API] Returning cached data for ${cacheKey}`);
                 return NextResponse.json(cached.data);
             }
 
@@ -383,7 +382,6 @@ async function getMonthCalendar(year: number, month: number) {
     // キャッシュに保存
     const cacheKey = `${year}-${month}`;
     calendarCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
-    console.log(`[Calendar API] Cached data for ${cacheKey}`);
 
     return NextResponse.json(responseData);
 }

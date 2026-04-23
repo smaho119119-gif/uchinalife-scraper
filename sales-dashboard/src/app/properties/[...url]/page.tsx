@@ -65,9 +65,6 @@ export default function PropertyDetailPage() {
         })
             .then(res => res.json())
             .then(data => {
-                console.log('🔍 Property data received:', data);
-                console.log('🔍 property_data:', data.property_data);
-                console.log('🔍 property_data type:', typeof data.property_data);
                 setProperty(data);
                 setLoading(false);
             });
@@ -110,7 +107,6 @@ export default function PropertyDetailPage() {
                 setImageGallery(data.images);
                 // 最新の生成画像を表示
                 setGeneratedImage(data.images[0].url);
-                console.log(`Loaded ${data.images.length} generated images`);
             }
         } catch (e) {
             console.error("Failed to load image history:", e);
