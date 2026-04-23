@@ -5,6 +5,7 @@ import { buildSalesCopyPrompt } from "@/prompts/sales-copy";
 import {
     extractPropertyDetails,
     buildPropertyHighlights,
+    type PropertyInputForPrompt,
 } from "@/prompts/property-fields";
 import {
     buildProposalImagePrompt,
@@ -79,7 +80,7 @@ export type TextModelKey = keyof typeof AI_MODELS.text;
 // テキスト生成（セールスコピー）
 // ============================================
 export async function generateSalesCopy(
-    property: any,
+    property: PropertyInputForPrompt,
     modelKey: TextModelKey = 'gemini-3-pro'
 ) {
     const modelConfig = AI_MODELS.text[modelKey];
@@ -111,7 +112,7 @@ export async function generateSalesCopy(
 // 画像生成（物件画像付き）
 // ============================================
 export async function generatePropertyImageWithPhotos(options: {
-    propertyData: any;
+    propertyData: PropertyInputForPrompt;
     propertyImages: Array<{ data: string, mimeType: string }>;
     staffPhoto: { data: string, mimeType: string } | null;
     mode: string;
@@ -219,7 +220,10 @@ export async function generatePropertyImageWithPhotos(options: {
         prompt += `\n\n画像仕様: ${options.size}解像度、${options.aspectRatio}アスペクト比。`;
 
         // Build parts array with images
-        const parts: any[] = [{ text: prompt }];
+        type GeminiPart =
+            | { text: string }
+            | { inlineData: { data: string; mimeType: string } };
+        const parts: GeminiPart[] = [{ text: prompt }];
 
         // Add property images
         console.log(`Adding ${options.propertyImages.length} property images to prompt`);
