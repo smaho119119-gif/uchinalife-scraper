@@ -1,21 +1,19 @@
 # TODO
 
-## ✅ Round 1〜8 完了（過去ラウンド詳細は change-log.md）
+## ✅ 過去ラウンド完了
+- R1-16: `docs/journey-summary.md` に集約（ai.ts -43%, RLS, CSP nonce, role-aware Supabase 等）
+- R17: console.log 0件化
+- R18: `any` / `as any` 排除
+- R19: `alert()` 全廃 → `sonner` toast
+- R20: CSP `'unsafe-inline'` 完全撤廃（script-src は nonce + strict-dynamic のみ）
 
-## ✅ Round 9 完了
-- 画像 prompt: standard モードを `src/prompts/property-image-modes.ts` のテーブル化（4 modes）
-- legacy `generatePropertyImage` を削除（callers ゼロを確認）
-- CSP Report-Only を `'unsafe-inline'` 抜き script-src で並行発行 → 違反収集の準備
-- ai.ts: **921 → 690 行** （1ラウンドで 25% 削減、Round 1 開始時 1214 から累計 -43%）
-
-## 🔜 Round 10 候補（優先度順）
-1. **画像 prompt の collage / magazine / overlay / business / infographic / その他テンプレート分離**
-   - まだ inline で残っている branches を builder 化
-2. **`<Script nonce>` 配備で本番 CSP を Enforcing に切替**
-   - Report-Only で違反ゼロを確認後、`'unsafe-inline'` を script-src から削除
-3. **`properties` の anon write 削除**（スクレイパ側 service_role 移行後）
-4. **react-window でリスト仮想化** （properties / map）
-5. **a11y: 残ダイアログの focus trap 一貫化**
+## 🔜 Round 21 候補（優先度順）
+1. **スクレイパ Python 側 service_role 移行**（`docs/scraper-migration.md` Phase 1-3）
+   - 完了後に `properties` の anon write ポリシー DROP
+2. **AreaStatsPanel / ChoroplethMap の hook 抽出**
+3. **react-window でリスト仮想化**（properties / map）
+4. **全画面 a11y / モバイル網羅監査**（focus trap, tap target, contrast）
+5. **`lib/ai.ts` error handling 統一**（try/catch + エラーメッセージ正規化）
 6. **`Property.property_data` の値型厳密化**
 
 ## 持続的観点

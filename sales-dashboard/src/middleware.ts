@@ -11,10 +11,10 @@ import { getToken } from 'next-auth/jwt';
  * - Everything else requires a valid NextAuth session.
  *
  * Headers: every response carries a baseline set of HTTP security headers
- * (CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP, etc.). The CSP allows
- * inline styles (Tailwind / React style props), and inline scripts (Next.js
- * bootstrap). 'unsafe-eval' is enabled only in dev for HMR. Tightening to a
- * nonce-based CSP is tracked in docs/todo.md.
+ * (CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP, etc.). Inline scripts
+ * are trusted via per-request nonce + 'strict-dynamic'; 'unsafe-inline' is
+ * no longer granted to script-src. Inline styles still need 'unsafe-inline'
+ * (React style props + Tailwind). 'unsafe-eval' is enabled only in dev HMR.
  */
 const PUBLIC_PAGE_PREFIXES = [
     '/sales/featured',
@@ -52,41 +52,14 @@ function generateNonce(): string {
 }
 
 function buildCsp(nonce: string): string {
-    // script-src:
-    //   - 'strict-dynamic' + nonce: trusted scripts only (modern browsers)
-    //   - 'unsafe-inline' kept as legacy fallback (ignored when strict-dynamic
-    //     is honored). Removing it requires emitting <Script nonce={...}>
-    //     for every Next.js bootstrap script first — tracked in docs/todo.md.
-    //   - 'unsafe-eval' only in dev for HMR / React DevTools
-    // style-src:
-    //   - 'unsafe-inline' stays — React style props + Tailwind require it
+    // script-src: nonce + 'strict-dynamic' trusts scripts carrying the nonce
+    // and anything they load. Next.js injects the nonce into its bootstrap
+    // <script> automatically when middleware sets `x-nonce`. 'unsafe-eval'
+    // stays dev-only for HMR / React DevTools.
     const scriptSrc = IS_DEV
-        ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' 'unsafe-eval' https:`
-        : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' https:`;
+        ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval' https:`
+        : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https:`;
 
-    return [
-        "default-src 'self'",
-        scriptSrc,
-        "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob: https:",
-        "font-src 'self' data:",
-        "connect-src 'self' https://*.supabase.co https://api.github.com https://generativelanguage.googleapis.com https://api.openai.com",
-        "frame-ancestors 'none'",
-        "base-uri 'self'",
-        "form-action 'self'",
-        "object-src 'none'",
-        "upgrade-insecure-requests",
-    ].join('; ');
-}
-
-/**
- * Stricter CSP shipped as report-only so we can observe violations before
- * enforcing it. Drops 'unsafe-inline' from script-src entirely; once we
- * confirm there are no violations from real traffic, this becomes the
- * enforced policy and the reporting variant disappears.
- */
-function buildCspReportOnly(nonce: string): string {
-    const scriptSrc = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https:`;
     return [
         "default-src 'self'",
         scriptSrc,
@@ -116,11 +89,6 @@ function applySecurityHeaders(res: NextResponseType, nonce: string): NextRespons
     );
     res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
     res.headers.set('Content-Security-Policy', buildCsp(nonce));
-    // Ship the next-gen policy as report-only so we can spot regressions
-    // (e.g. a third-party inline script we forgot to nonce) before flipping
-    // it to enforcement. Browsers without the report-uri/report-to wired up
-    // simply log violations to the console — that's enough for this stage.
-    res.headers.set('Content-Security-Policy-Report-Only', buildCspReportOnly(nonce));
     return res;
 }
 

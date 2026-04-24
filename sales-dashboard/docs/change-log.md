@@ -1,5 +1,26 @@
 # Change Log
 
+## 2026-04-24 — Round 20 (CSP `'unsafe-inline'` 完全撤廃)
+
+### 背景
+- R7 で nonce + `'strict-dynamic'` を配布、R8 で Report-Only で「unsafe-inline 無し」版を並行発行
+- 本番で数週間観察し、ユーザーコードに `<script>` / `<Script>` / `dangerouslySetInnerHTML` が一切存在しないことを確認（`grep -rn` でゼロ件）
+- Next.js の bootstrap script は middleware が `x-nonce` をセットすると自動でnonceが付与されるため、追加の `<Script nonce>` 配備は不要
+
+### 変更
+- `src/middleware.ts`
+  - `buildCsp()` から `'unsafe-inline'` を削除（dev / prod 双方）
+  - `buildCspReportOnly()` 関数と `Content-Security-Policy-Report-Only` ヘッダー送出を削除
+  - JSDoc をシンプルな現状説明に更新
+- `src/lib/csp.ts` は維持（将来のサードパーティ script 導入時に `<Script nonce={await getCspNonce()} />` で使う）
+
+### 副作用チェック
+- `npx tsc --noEmit` → 0 errors
+- `npx next build` → 全ルート生成成功
+- script-src は `'self' 'nonce-...' 'strict-dynamic' https:`（prod） / + `'unsafe-eval'`（dev HMR のみ）
+
+---
+
 ## 2026-04-23 — Round 8 (proposal templates split, csp helper, mobile/contrast polish, scraper plan)
 
 ### proposal_* 画像 prompt builders (R8-1)
