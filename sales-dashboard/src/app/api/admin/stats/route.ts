@@ -24,7 +24,7 @@ export async function GET() {
                     .from('properties')
                     .select('*', { count: 'exact', head: true })
                     .eq('is_active', true)
-                    .eq('genre_name_ja', g),
+                    .eq('category', g),
             ),
         ]);
 
