@@ -15,21 +15,18 @@ export async function GET() {
     try {
         const supabase = getSupabase('service');
 
-        const [totalRes, activeRes, latestRes, ...genreRes] = await Promise.all([
+        const [totalRes, latestRes, ...genreRes] = await Promise.all([
             supabase.from('properties').select('*', { count: 'exact', head: true }),
-            supabase.from('properties').select('*', { count: 'exact', head: true }).eq('is_active', true),
             supabase.from('properties').select('first_seen_date').order('first_seen_date', { ascending: false }).limit(1),
             ...GENRES.map((g) =>
                 supabase
                     .from('properties')
                     .select('*', { count: 'exact', head: true })
-                    .eq('is_active', true)
                     .eq('genre_name_ja', g),
             ),
         ]);
 
         if (totalRes.error) throw totalRes.error;
-        if (activeRes.error) throw activeRes.error;
 
         const categories: Record<string, number> = {};
         genreRes.forEach((res, i) => {
@@ -38,11 +35,14 @@ export async function GET() {
         });
 
         const lastUpdated = latestRes.data?.[0]?.first_seen_date ?? null;
+        const total = totalRes.count ?? 0;
 
         return NextResponse.json(
             {
-                total: totalRes.count ?? 0,
-                active: activeRes.count ?? 0,
+                total,
+                // We don't track a soft-delete flag, so every row in the
+                // table is considered active for the dashboard's purposes.
+                active: total,
                 categories,
                 lastUpdated,
             },

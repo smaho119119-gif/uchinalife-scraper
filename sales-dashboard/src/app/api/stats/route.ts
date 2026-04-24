@@ -12,14 +12,13 @@ const CATEGORY_TYPE_MAP: Record<string, string> = {
 // Supabase's 8s statement timeout. We now issue a handful of cheap
 // count-only queries in parallel — each uses an index (is_active, category,
 // genre_name_ja, first_seen_date) and returns in well under a second.
-async function countActive(
+async function countProperties(
     supabase: ReturnType<typeof getSupabase>,
     filters: Record<string, string> = {},
 ): Promise<number> {
     let q = supabase
         .from('properties')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+        .select('*', { count: 'exact', head: true });
     for (const [k, v] of Object.entries(filters)) {
         q = q.eq(k, v);
     }
@@ -37,19 +36,18 @@ export async function GET() {
         const genres = Object.keys(CATEGORY_TYPE_MAP);
 
         const [total, rentalCount, saleCount, newToday, ...genreCounts] = await Promise.all([
-            countActive(supabase),
-            countActive(supabase, { category: '賃貸' }),
-            countActive(supabase, { category: '売買' }),
+            countProperties(supabase),
+            countProperties(supabase, { category: '賃貸' }),
+            countProperties(supabase, { category: '売買' }),
             (async () => {
                 const { count, error } = await supabase
                     .from('properties')
                     .select('*', { count: 'exact', head: true })
-                    .eq('is_active', true)
                     .gte('first_seen_date', today);
                 if (error) throw error;
                 return count ?? 0;
             })(),
-            ...genres.map((g) => countActive(supabase, { genre_name_ja: g })),
+            ...genres.map((g) => countProperties(supabase, { genre_name_ja: g })),
         ]);
 
         const categories: Record<string, number> = {};
