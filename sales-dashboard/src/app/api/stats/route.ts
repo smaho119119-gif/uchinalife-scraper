@@ -18,7 +18,8 @@ async function countProperties(
 ): Promise<number> {
     let q = supabase
         .from('properties')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
     for (const [k, v] of Object.entries(filters)) {
         q = q.eq(k, v);
     }
@@ -29,7 +30,10 @@ async function countProperties(
 
 export async function GET() {
     try {
-        const supabase = getSupabase('anon');
+        // Use service role to bypass RLS. The underlying properties table
+        // has row-level filters that hide most rows from the anon role, so
+        // anon count(*) returned 0 even though the public RPC used to work.
+        const supabase = getSupabase('service');
 
         const today = new Date().toISOString().split('T')[0];
 
@@ -43,6 +47,7 @@ export async function GET() {
                 const { count, error } = await supabase
                     .from('properties')
                     .select('*', { count: 'exact', head: true })
+                    .eq('is_active', true)
                     .gte('first_seen_date', today);
                 if (error) throw error;
                 return count ?? 0;
