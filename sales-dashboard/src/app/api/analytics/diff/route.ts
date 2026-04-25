@@ -10,7 +10,9 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const days = parseIntParam(searchParams.get('days'), 7, 1, 365);
 
-        const supabase = getSupabase('anon');
+        // Service role needed: RLS on properties hides rows from anon, so the
+        // RPC (non-SECURITY DEFINER) returned nothing / errored for anon.
+        const supabase = getSupabase('service');
         const { data, error } = await supabase.rpc('get_diff_summary', { days_back: days });
         if (error) throw error;
 

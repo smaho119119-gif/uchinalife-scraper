@@ -26,7 +26,18 @@ export function jsonError(message: string, status = 500, details?: unknown) {
 }
 
 export function logAndSerializeError(scope: string, err: unknown): string {
-    const message = err instanceof Error ? err.message : String(err);
+    // Supabase errors are plain objects ({ message, code, details, hint }),
+    // not Error instances, so `String(err)` produced "[object Object]".
+    // Reach into `.message` when present, fall back to a JSON dump.
+    let message: string;
+    if (err instanceof Error) {
+        message = err.message;
+    } else if (err && typeof err === 'object' && 'message' in err) {
+        const m = (err as { message?: unknown }).message;
+        message = typeof m === 'string' && m ? m : JSON.stringify(err);
+    } else {
+        message = String(err);
+    }
     console.error(`[${scope}]`, message, err);
     return message;
 }
