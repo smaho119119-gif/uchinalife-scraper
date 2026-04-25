@@ -1,5 +1,29 @@
 # Change Log
 
+## 2026-04-25 — Round 22 (multi-agent bug hunt: trends 500 + jigyo/jigyou 不整合)
+
+### 修正内容
+- `/api/analytics/trends`: anon → service role に切替 (R22-01 / Supabase 8s statement timeout)
+- カテゴリ ID `jigyou` → `jigyo` 統一 (R22-02 / 4 ファイル: properties/page.tsx, header.tsx, featured/[slug]/page.tsx, MarketPriceCalculator.tsx)
+- `/api/sales/market-price` のエラーハンドリングを `logAndSerializeError` に統一 (R22-03)
+- `/api/sales/market-price` から未使用 `createClient` import 削除 (R22-04)
+
+### 原因
+- trends: dashboard_stats / admin_stats / analytics_diff と同根。anon ロールで RPC を叩くと RLS で重くなり 8s timeout に到達。R20-fix と同パターン。
+- jigyou: 過去のコピペで誤記が UI 側 4 ファイルに伝播、API が categories.ts に揃った後も UI 側が取り残されていた。
+
+### 影響範囲
+- trends 修正 → 営業ダッシュボード「差分分析」配下のトレンドカード復活
+- jigyo 統一 → 物件一覧 / featured 詳細 / ヘッダーフィルタ / 相場ツールで「賃貸事業用」が機能するように
+
+### 副作用チェック
+- `npx tsc --noEmit` → 0 errors
+- `npx next build` → 全ルート生成成功
+- `grep -rn 'jigyou' src` → 0 件
+- 全 anon ロール API を smoke (areas/properties/area-stats/by-area/new-listings/pet-friendly/market-price) → 200 確認、trends は service 切替後に再 smoke 予定
+
+---
+
 ## 2026-04-24 — Round 20 (CSP `'unsafe-inline'` 完全撤廃)
 
 ### 背景

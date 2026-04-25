@@ -15,7 +15,7 @@ import { formatPrice } from "@/lib/price";
 const CATEGORY_TABS = [
   { id: "", label: "全て" },
   { id: "jukyo", label: "賃貸住居" },
-  { id: "jigyou", label: "賃貸事業用" },
+  { id: "jigyo", label: "賃貸事業用" },
   { id: "tochi", label: "売買土地" },
   { id: "mansion", label: "売買マンション" },
   { id: "house", label: "売買戸建" },

@@ -16,7 +16,7 @@ import Link from 'next/link';
 const CATEGORIES = {
     rent: [
         { id: 'jukyo', label: '住居', icon: Home, color: 'from-blue-500 to-blue-600' },
-        { id: 'jigyou', label: '事業用', icon: Store, color: 'from-purple-500 to-purple-600' },
+        { id: 'jigyo', label: '事業用', icon: Store, color: 'from-purple-500 to-purple-600' },
         { id: 'yard', label: '月極駐車場', icon: Car, color: 'from-green-500 to-green-600' },
         { id: 'parking', label: '時間貸駐車場', icon: ParkingCircle, color: 'from-teal-500 to-teal-600' },
     ],
@@ -203,7 +203,7 @@ export default function PropertiesPage() {
                         matchesCategory = true;
                         break;
                     }
-                    if (catId === 'jigyou' && (genre.includes('事業') || genre.includes('店舗') || genre.includes('倉庫'))) {
+                    if (catId === 'jigyo' && (genre.includes('事業') || genre.includes('店舗') || genre.includes('倉庫'))) {
                         matchesCategory = true;
                         break;
                     }

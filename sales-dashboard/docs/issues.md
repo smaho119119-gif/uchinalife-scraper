@@ -1,5 +1,18 @@
 # Open Issues
 
+## 2026-04-25 (Round 22 / multi-agent bug hunt)
+
+### 軽微 / 後回し
+- **R22-i01**: `AreaStatsPanel` から `/sales/market-price?area=...` に遷移してもページ側が `searchParams.area` を読まないため、エリア事前選択が効かない。修正は MarketPriceCalculator にエリア初期値プロパティを追加する小修正。優先度: 軽微。
+- **R22-i02**: `analytics_areas`, `dashboard_stats` 等の RPC が SECURITY DEFINER でないものは将来の row 増加で同じ timeout を踏む。Supabase 側で `SECURITY DEFINER` 化するのが正解。今は service role 側でバイパスしているが、長期的には DB 側で対応。
+- **R22-i03**: `MarketPriceCalculator` 内の `CATEGORIES` 定数が `lib/categories.ts` と二重定義。次ラウンドで `lib/categories.ts` から派生させる。
+
+### 追加調査項目
+- 他の RPC ( `analytics_properties`, `analytics_areas`, `get_diff_summary`, `analytics_trends`, `dashboard_stats`, `admin_stats`) が SECURITY DEFINER かどうか Supabase ダッシュボードで確認 (本リポジトリには SQL が無い)
+- properties テーブルの `is_active` カラムを scraper 側で確実にセットしているか確認 (R20 の調査で "false/null 行が 44k ある" 状況)
+
+---
+
 ## 2026-04-23 (Round 2 完了時点)
 
 ### Round 3 で対応予定

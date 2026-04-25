@@ -1,5 +1,19 @@
 # Design Decisions
 
+## 2026-04-25 — Round 22 (multi-agent bug hunt)
+
+### D-22-1: 重い集計 RPC は service role で叩く
+- 文脈: properties が 60k 行を超え、anon ロールで RPC を叩くと RLS フィルタが先に走り Supabase の 8s statement timeout を踏むようになった。`/api/stats`, `/api/admin/stats`, `/api/analytics/diff`, `/api/analytics/trends` で同症状。
+- 判断: 一律 `getSupabase('service')` に切り替える。RPC を SECURITY DEFINER で再定義するのが理想だが、本リポジトリから DB スキーマを操作できないため、アプリ側で対処。
+- レスポンスは入力依存ではなく集約数値だけなので、service role の使用が情報漏洩リスクを増やすことはない。
+- 長期: Supabase 側で RPC を SECURITY DEFINER 化したら anon に戻す。issues.md R22-i02 で追跡。
+
+### D-22-2: カテゴリ ID は `lib/categories.ts` を唯一の真実とする
+- 文脈: UI 4 ファイルに `jigyou` と誤記が残り、API (`jigyo`) と齟齬が出てフィルタゼロ件 / 400 を起こしていた。
+- 判断: 各 UI 定数は `lib/categories.ts` から派生させる方針へ移行。今ラウンドはまず誤記を直すだけに留め、二重定義の解消は R23 で対応 (issues.md R22-i03)。
+
+---
+
 ## 2026-04-23 — Round 1
 （前回分はそのまま保持）
 

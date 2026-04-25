@@ -10,7 +10,10 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const days = parseIntParam(searchParams.get('days'), 30, 1, 365);
 
-        const supabase = getSupabase('anon');
+        // Service role: anon RLS forces the RPC to scan with extra row
+        // filters and trips Supabase's 8s statement timeout. Same root cause
+        // as analytics/diff (R20-fix) — the RPC isn't SECURITY DEFINER.
+        const supabase = getSupabase('service');
         const { data, error } = await supabase.rpc('analytics_trends', { p_days: days });
         if (error) throw error;
 

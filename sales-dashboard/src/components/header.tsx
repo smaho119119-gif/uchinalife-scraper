@@ -15,7 +15,7 @@ import {
 const CATEGORIES = {
     rent: [
         { id: 'jukyo', label: '住居', icon: Home, color: 'bg-blue-500 hover:bg-blue-600' },
-        { id: 'jigyou', label: '事業用', icon: Store, color: 'bg-purple-500 hover:bg-purple-600' },
+        { id: 'jigyo', label: '事業用', icon: Store, color: 'bg-purple-500 hover:bg-purple-600' },
         { id: 'yard', label: '月極駐車場', icon: Car, color: 'bg-green-500 hover:bg-green-600' },
         { id: 'parking', label: '時間貸', icon: ParkingCircle, color: 'bg-teal-500 hover:bg-teal-600' },
     ],

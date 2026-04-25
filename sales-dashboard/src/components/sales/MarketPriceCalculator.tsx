@@ -48,7 +48,7 @@ const CATEGORIES = {
       color: "from-blue-500 to-blue-600",
     },
     {
-      id: "jigyou",
+      id: "jigyo",
       label: "事業用",
       icon: Store,
       color: "from-purple-500 to-purple-600",
@@ -96,7 +96,7 @@ const CATEGORIES = {
 
 const RENTAL_IDS = new Set(CATEGORIES.rent.map((c) => c.id));
 const RESIDENTIAL_IDS = new Set(["jukyo", "mansion", "house"]);
-const BUILDING_IDS = new Set(["jukyo", "jigyou", "mansion", "house"]);
+const BUILDING_IDS = new Set(["jukyo", "jigyo", "mansion", "house"]);
 
 const MADORI_OPTIONS = [
   "1R",

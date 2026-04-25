@@ -1,8 +1,20 @@
 # Bug List - sales-dashboard
 
-最終更新: 2026-04-23 (Round 2 完了)
+最終更新: 2026-04-25 (Round 22 進行中)
 
 凡例: 優先度 [重大|中|軽微] / 状況 [未対応|対応中|修正済|再検証待ち|完了]
+
+---
+
+## Round 22 (マルチエージェント・バグハント / 進行中)
+
+| ID | タイトル | 症状 | 再現条件 | 根本原因 | 影響範囲 | 優先度 | 対応状況 |
+|----|----------|------|----------|----------|----------|--------|----------|
+| R22-01 | analytics/trends 500 (Supabase timeout) | `/api/analytics/trends?days=N` が `canceling statement due to statement timeout` で 500 | ダッシュボード読込時 / トレンド表示時 | RPC `analytics_trends` を anon で叩くと RLS で重くなり Supabase の 8s statement timeout に到達 | 営業ダッシュボード「トレンド分析」全体 | 重大 | 修正済 (service role に切替) |
+| R22-02 | カテゴリ ID `jigyou` ↔ `jigyo` の不整合 | 「賃貸事業用」を選択するとフィルタ結果ゼロ件 / 相場ツールで 400 | properties / featured/[slug] / header / MarketPriceCalculator から `jigyou` で検索 | API 側 (categories.ts / market-price route) は `jigyo` だが UI 4 ファイルが `jigyou` で誤記 | 物件一覧 / featured 詳細 / ヘッダーフィルタ / 相場ツール | 重大 | 修正済 (4ファイル統一) |
+| R22-03 | market-price でエラーが "Internal server error" に潰れる | Supabase エラー発生時に内部メッセージが消える | クエリ失敗時 | `error instanceof Error` 判定で Supabase plain object error が落ちる | デバッグ性 | 中 | 修正済 (logAndSerializeError へ統一) |
+| R22-04 | market-price route に未使用 `createClient` import | dead code | 静的解析 | Round 7 の supabase-server 集約時の取り残し | 軽微 / 保守性 | 軽微 | 修正済 |
+| R22-05 | AreaStatsPanel → market-price の `?area=` クエリが未読込 | エリア渡しが反映されない | エリアパネル「相場価格ツールで詳しく見る」 | market-price/page.tsx が searchParams を見ていない | UX 軽微 | 軽微 | issues.md に積む |
 
 ---
 

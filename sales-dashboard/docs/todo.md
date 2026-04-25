@@ -6,8 +6,10 @@
 - R18: `any` / `as any` 排除
 - R19: `alert()` 全廃 → `sonner` toast
 - R20: CSP `'unsafe-inline'` 完全撤廃（script-src は nonce + strict-dynamic のみ）
+- R21 (緊急ホットフィックス): SUPABASE_SERVICE_ROLE_KEY 本番投入、stats/admin-stats/diff の service role 化、is_active + category 列で count 修正
+- R22 (multi-agent): analytics/trends の service role 化, `jigyou` → `jigyo` 4 ファイル統一, market-price エラーシリアライズ統一
 
-## 🔜 Round 21 候補（優先度順）
+## 🔜 Round 23 候補（優先度順）
 1. **スクレイパ Python 側 service_role 移行**（`docs/scraper-migration.md` Phase 1-3）
    - 完了後に `properties` の anon write ポリシー DROP
 2. **AreaStatsPanel / ChoroplethMap の hook 抽出**

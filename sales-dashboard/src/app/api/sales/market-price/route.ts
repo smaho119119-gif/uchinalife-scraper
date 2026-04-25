@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabase } from '@/lib/supabase-server';
-import { createClient } from "@supabase/supabase-js";
+import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 import {
   parsePrice,
   parseArea,
@@ -422,9 +422,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(responseBody);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-    console.error("Market price API error:", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return jsonError(logAndSerializeError("sales/market-price", error));
   }
 }
