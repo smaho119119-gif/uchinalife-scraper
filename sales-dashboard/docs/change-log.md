@@ -1,5 +1,21 @@
 # Change Log
 
+## 2026-04-26 — Round 22b (生 fetch のクラッシュ耐性強化)
+
+### 修正内容
+- `src/app/properties/[...url]/page.tsx`: 物件詳細初期 fetch を `then(res => res.json())` から `res.ok` 判定 + try/catch + `finally(setLoading(false))` に書き換え (R22-06)。500 時にローディング永続 / 壊れた state でクラッシュする経路を遮断。
+- `src/app/sales/proposal/page.tsx`: `calculateMarketData` の `/api/properties?limit=50000` レスポンスを `res.ok && Array.isArray(payload)` で防御 (R22-07)。エラー応答が `Property[]` として後段の filter に流れていた。
+
+### 副作用チェック
+- `npx tsc --noEmit` → 0 errors
+- `npx next build` → 全ルート生成成功
+- 物件詳細・proposal 共に既存の `!property` / `[]` フォールバック画面が機能するため UX 退行なし
+
+### 残課題 (issues.md)
+- proposal の 50000 件一括取得は本来 area-stats API などへ移行すべき (R22-i04 として追加)
+
+---
+
 ## 2026-04-25 — Round 22 (multi-agent bug hunt: trends 500 + jigyo/jigyou 不整合)
 
 ### 修正内容

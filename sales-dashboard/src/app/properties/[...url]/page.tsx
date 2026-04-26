@@ -63,9 +63,17 @@ export default function PropertyDetailPage() {
         fetch(`/api/properties/${encodeURIComponent(url)}`, {
             cache: 'force-cache' // キャッシュがあれば即座に使用
         })
-            .then(res => res.json())
-            .then(data => {
-                setProperty(data);
+            .then(async (res) => {
+                if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+                const data = await res.json();
+                if (data && typeof data === 'object' && !('error' in data)) {
+                    setProperty(data);
+                }
+            })
+            .catch((err) => {
+                console.error('failed to load property', err);
+            })
+            .finally(() => {
                 setLoading(false);
             });
 

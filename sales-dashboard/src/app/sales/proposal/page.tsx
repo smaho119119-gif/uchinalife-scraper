@@ -130,7 +130,10 @@ async function calculateMarketData(
   // Fetch all active properties to compute stats per city
   try {
     const res = await fetch("/api/properties?limit=50000");
-    const allProps: Property[] = await res.json();
+    if (!res.ok) return [];
+    const payload: unknown = await res.json();
+    if (!Array.isArray(payload)) return [];
+    const allProps = payload as Property[];
 
     const results: MarketDataItem[] = [];
     for (const city of cities) {

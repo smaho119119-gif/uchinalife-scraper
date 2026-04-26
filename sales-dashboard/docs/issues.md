@@ -5,7 +5,8 @@
 ### 軽微 / 後回し
 - **R22-i01**: `AreaStatsPanel` から `/sales/market-price?area=...` に遷移してもページ側が `searchParams.area` を読まないため、エリア事前選択が効かない。修正は MarketPriceCalculator にエリア初期値プロパティを追加する小修正。優先度: 軽微。
 - **R22-i02**: `analytics_areas`, `dashboard_stats` 等の RPC が SECURITY DEFINER でないものは将来の row 増加で同じ timeout を踏む。Supabase 側で `SECURITY DEFINER` 化するのが正解。今は service role 側でバイパスしているが、長期的には DB 側で対応。
-- **R22-i03**: `MarketPriceCalculator` 内の `CATEGORIES` 定数が `lib/categories.ts` と二重定義。次ラウンドで `lib/categories.ts` から派生させる。
+- **R22-i03**: `MarketPriceCalculator` 内の `CATEGORIES` 定数が `lib/categories.ts` と二重定義。次ラウンドで `lib/categories.ts` から派生させる。同様に `header.tsx`, `properties/page.tsx` にも独立した CATEGORIES 定数があり 3 重重複。`jigyou` 誤記の温床になった構造。
+- **R22-i04**: `src/app/sales/proposal/page.tsx` の `calculateMarketData` が `/api/properties?limit=50000` を一括取得している。area-stats API などに置き換えるとペイロードが桁単位で減る。
 
 ### 追加調査項目
 - 他の RPC ( `analytics_properties`, `analytics_areas`, `get_diff_summary`, `analytics_trends`, `dashboard_stats`, `admin_stats`) が SECURITY DEFINER かどうか Supabase ダッシュボードで確認 (本リポジトリには SQL が無い)

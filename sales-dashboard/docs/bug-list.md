@@ -15,6 +15,8 @@
 | R22-03 | market-price でエラーが "Internal server error" に潰れる | Supabase エラー発生時に内部メッセージが消える | クエリ失敗時 | `error instanceof Error` 判定で Supabase plain object error が落ちる | デバッグ性 | 中 | 修正済 (logAndSerializeError へ統一) |
 | R22-04 | market-price route に未使用 `createClient` import | dead code | 静的解析 | Round 7 の supabase-server 集約時の取り残し | 軽微 / 保守性 | 軽微 | 修正済 |
 | R22-05 | AreaStatsPanel → market-price の `?area=` クエリが未読込 | エリア渡しが反映されない | エリアパネル「相場価格ツールで詳しく見る」 | market-price/page.tsx が searchParams を見ていない | UX 軽微 | 軽微 | issues.md に積む |
+| R22-06 | 物件詳細ページ初期 fetch にエラーパスなし | 500 時にローディング永続 / 壊れたデータが state に入りクラッシュ可能 | `/properties/[...url]` を 500 状態で開く | `fetch().then(res.json())` に res.ok / catch / finally 無し | 物件詳細全体 | 重大 | 修正済 (res.ok / try-catch / finally で防御) |
+| R22-07 | proposal page の `/api/properties?limit=50000` 一括取得時のクラッシュ耐性 | API 失敗時にエラーオブジェクトが `Property[]` として後段に流れる | proposal で複数物件選択中に API が落ちる | `await res.json()` 直書き、Array.isArray 検証なし | 営業提案ツール | 中 | 修正済 (res.ok + Array.isArray 防御) |
 
 ---
 
