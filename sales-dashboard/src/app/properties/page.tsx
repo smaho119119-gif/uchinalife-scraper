@@ -11,9 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Search, ExternalLink, Sparkles, Home, Building2, Store, Car, ParkingCircle, MapPin, Building, Package, CircleDollarSign, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import Link from 'next/link';
+import type { CategoryId } from '@/lib/categories';
+
+// Constrain `id` to CategoryId so typos surface at compile time (R22-i03).
+type CategoryUI = { id: CategoryId; label: string; icon: typeof Home; color: string };
 
 // カテゴリ定義
-const CATEGORIES = {
+const CATEGORIES: { rent: CategoryUI[]; buy: CategoryUI[] } = {
     rent: [
         { id: 'jukyo', label: '住居', icon: Home, color: 'from-blue-500 to-blue-600' },
         { id: 'jigyo', label: '事業用', icon: Store, color: 'from-purple-500 to-purple-600' },

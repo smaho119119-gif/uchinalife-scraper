@@ -1,5 +1,24 @@
 # Change Log
 
+## 2026-04-26 — Round 23 (CategoryId 型強制で typo 再発防止)
+
+### 修正内容
+- `src/lib/categories.ts` の `CategoryId` を UI 側 CATEGORIES 定数の `id` に強制 (R23-01)
+  - `src/components/header.tsx`: CATEGORIES.{rent,buy} の各 id を CategoryId に / `selectedCategories` を `CategoryId[]` / `toggleCategory` 引数も CategoryId
+  - `src/app/properties/page.tsx`: 同様に CATEGORIES の id を CategoryId に
+  - `src/components/sales/MarketPriceCalculator.tsx`: CATEGORIES の id を CategoryId に / `selectedCategory` を `CategoryId | ""` / Set.has は `as Set<string>` で空文字センチネル許容
+
+### 効果
+- `jigyou` のような typo を書いた瞬間 TypeScript がコンパイル時にエラー化
+- R22-02 と同じバグの再発を構造で防止
+
+### 副作用チェック
+- `npx tsc --noEmit` → 0 errors
+- `npx next build` → 全ルート生成成功
+- 既存 UI 動作は型変更のみで実行時挙動は不変
+
+---
+
 ## 2026-04-26 — Round 22b (生 fetch のクラッシュ耐性強化)
 
 ### 修正内容

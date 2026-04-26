@@ -17,6 +17,7 @@
 | R22-05 | AreaStatsPanel → market-price の `?area=` クエリが未読込 | エリア渡しが反映されない | エリアパネル「相場価格ツールで詳しく見る」 | market-price/page.tsx が searchParams を見ていない | UX 軽微 | 軽微 | issues.md に積む |
 | R22-06 | 物件詳細ページ初期 fetch にエラーパスなし | 500 時にローディング永続 / 壊れたデータが state に入りクラッシュ可能 | `/properties/[...url]` を 500 状態で開く | `fetch().then(res.json())` に res.ok / catch / finally 無し | 物件詳細全体 | 重大 | 修正済 (res.ok / try-catch / finally で防御) |
 | R22-07 | proposal page の `/api/properties?limit=50000` 一括取得時のクラッシュ耐性 | API 失敗時にエラーオブジェクトが `Property[]` として後段に流れる | proposal で複数物件選択中に API が落ちる | `await res.json()` 直書き、Array.isArray 検証なし | 営業提案ツール | 中 | 修正済 (res.ok + Array.isArray 防御) |
+| R23-01 | カテゴリ ID typo を型システムが防げない構造 | `jigyou` 誤記が R22 まで通っていた | UI の CATEGORIES 定数の `id` が `string` 型 | 各 UI が独自の string リテラルで CATEGORIES を持つため typo が静的に検出されない | header / properties / MarketPriceCalculator | 中 | 修正済 (CategoryId 型で制約 + 関連 state も CategoryId 化) |
 
 ---
 

@@ -10,9 +10,14 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import type { CategoryId } from "@/lib/categories";
+
+// Each `id` is constrained to CategoryId so a typo like 'jigyou' fails to
+// compile, preventing a re-run of the R22-02 mismatch.
+type CategoryUI = { id: CategoryId; label: string; icon: typeof Home; color: string };
 
 // カテゴリ定義（8カテゴリ）
-const CATEGORIES = {
+const CATEGORIES: { rent: CategoryUI[]; buy: CategoryUI[] } = {
     rent: [
         { id: 'jukyo', label: '住居', icon: Home, color: 'bg-blue-500 hover:bg-blue-600' },
         { id: 'jigyo', label: '事業用', icon: Store, color: 'bg-purple-500 hover:bg-purple-600' },
@@ -84,7 +89,7 @@ export function Header() {
     const pathname = usePathname();
     
     // フィルター状態
-    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+    const [selectedCategories, setSelectedCategories] = useState<CategoryId[]>([]);
     const [selectedType, setSelectedType] = useState<'all' | 'rent' | 'buy'>('all');
     const [priceMin, setPriceMin] = useState<number | null>(null);
     const [priceMax, setPriceMax] = useState<number | null>(null);
@@ -105,9 +110,9 @@ export function Header() {
     if (pathname === "/login") return null;
 
     // カテゴリトグル
-    const toggleCategory = (id: string) => {
-        setSelectedCategories(prev => 
-            prev.includes(id) 
+    const toggleCategory = (id: CategoryId) => {
+        setSelectedCategories(prev =>
+            prev.includes(id)
                 ? prev.filter(c => c !== id)
                 : [...prev, id]
         );

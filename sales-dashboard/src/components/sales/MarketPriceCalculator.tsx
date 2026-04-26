@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { REGIONS } from "@/lib/area";
 import { formatPrice } from "@/lib/price";
+import type { CategoryId } from "@/lib/categories";
 import PriceDistributionChart from "./PriceDistributionChart";
 import AreaComparisonTable from "./AreaComparisonTable";
 
@@ -39,7 +40,10 @@ import AreaComparisonTable from "./AreaComparisonTable";
 // Category definitions (mirrors properties page)
 // --------------------------------------------------------------------------
 
-const CATEGORIES = {
+// Constrain `id` to CategoryId so typos surface at compile time (R22-i03).
+type CategoryUI = { id: CategoryId; label: string; icon: typeof Home; color: string };
+
+const CATEGORIES: { rent: CategoryUI[]; buy: CategoryUI[] } = {
   rent: [
     {
       id: "jukyo",
@@ -128,7 +132,7 @@ const MADORI_OPTIONS = [
 export default function MarketPriceCalculator() {
   // Step state
   const [selectedArea, setSelectedArea] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId | "">("");
   const [madori, setMadori] = useState<string>("");
   const [ageMax, setAgeMax] = useState<number>(30);
 
@@ -136,9 +140,11 @@ export default function MarketPriceCalculator() {
   const [showConditions, setShowConditions] = useState(false);
   const { result, loading, error, search } = useMarketPriceSearch();
 
-  const isRental = RENTAL_IDS.has(selectedCategory);
-  const showMadori = RESIDENTIAL_IDS.has(selectedCategory);
-  const showAge = BUILDING_IDS.has(selectedCategory);
+  // The empty-string sentinel just means "nothing picked yet"; Set.has on a
+  // string union widens fine here.
+  const isRental = (RENTAL_IDS as Set<string>).has(selectedCategory);
+  const showMadori = (RESIDENTIAL_IDS as Set<string>).has(selectedCategory);
+  const showAge = (BUILDING_IDS as Set<string>).has(selectedCategory);
 
   const categoryLabel =
     [...CATEGORIES.rent, ...CATEGORIES.buy].find(
