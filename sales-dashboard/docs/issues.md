@@ -7,6 +7,12 @@
 - **R22-i02**: `analytics_areas`, `dashboard_stats` 等の RPC が SECURITY DEFINER でないものは将来の row 増加で同じ timeout を踏む。Supabase 側で `SECURITY DEFINER` 化するのが正解。今は service role 側でバイパスしているが、長期的には DB 側で対応。
 - **R22-i03**: `MarketPriceCalculator` 内の `CATEGORIES` 定数が `lib/categories.ts` と二重定義。同様に `header.tsx`, `properties/page.tsx` にも独立した CATEGORIES 定数があり 3 重重複。Round 23 で id を `CategoryId` 型に固定して再発防止は完了。完全な単一化は将来課題。
 - **R22-i04**: `src/app/sales/proposal/page.tsx` の `calculateMarketData` が `/api/properties?limit=50000` を一括取得している。area-stats API などに置き換えるとペイロードが桁単位で減る。
+- **R24-i01**: 真の DB 側パフォーマンス対策。Supabase ダッシュボードで以下:
+  1. `properties` に `(category, area)` 複合 index (where is_active = true)
+  2. `analytics_diff` / `analytics_trends` を `SECURITY DEFINER` 化して anon でも安全に呼べる単一 RPC に統合
+  3. `properties.is_active = true` 用部分 index `idx_properties_active`
+- **R24-i02**: `properties/locations` payload 219KB の圧縮。サーバ側で geo bin 化、もしくはページ側で lazy-load。
+- **R24-i03**: Supabase クライアントのコールドスタート短縮。今は module-scope cache 済 (lib/supabase-server.ts) だが、Vercel cron で 5 分おきに warmup ping を打つと cold 0.5–2s が消える。
 
 ### 追加調査項目
 - 他の RPC ( `analytics_properties`, `analytics_areas`, `get_diff_summary`, `analytics_trends`, `dashboard_stats`, `admin_stats`) が SECURITY DEFINER かどうか Supabase ダッシュボードで確認 (本リポジトリには SQL が無い)

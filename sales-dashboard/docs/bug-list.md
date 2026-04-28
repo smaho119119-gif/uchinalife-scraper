@@ -18,6 +18,10 @@
 | R22-06 | 物件詳細ページ初期 fetch にエラーパスなし | 500 時にローディング永続 / 壊れたデータが state に入りクラッシュ可能 | `/properties/[...url]` を 500 状態で開く | `fetch().then(res.json())` に res.ok / catch / finally 無し | 物件詳細全体 | 重大 | 修正済 (res.ok / try-catch / finally で防御) |
 | R22-07 | proposal page の `/api/properties?limit=50000` 一括取得時のクラッシュ耐性 | API 失敗時にエラーオブジェクトが `Property[]` として後段に流れる | proposal で複数物件選択中に API が落ちる | `await res.json()` 直書き、Array.isArray 検証なし | 営業提案ツール | 中 | 修正済 (res.ok + Array.isArray 防御) |
 | R23-01 | カテゴリ ID typo を型システムが防げない構造 | `jigyou` 誤記が R22 まで通っていた | UI の CATEGORIES 定数の `id` が `string` 型 | 各 UI が独自の string リテラルで CATEGORIES を持つため typo が静的に検出されない | header / properties / MarketPriceCalculator | 中 | 修正済 (CategoryId 型で制約 + 関連 state も CategoryId 化) |
+| R24-01 | analytics/diff が cold で 10s タイムアウト 500 | 営業ダッシュボード初回読込で 500 | days={7,30,90} すべて cold で 10.06s に張り付く | `dynamic = 'force-dynamic'` で revalidate が無効化、毎回 RPC 実行 | 営業ダッシュボード差分分析 | 重大 | 修正済 (force-dynamic 撤去 / revalidate=300 / maxDuration=30) |
+| R24-02 | featured/pet-friendly cold 500 | 公開「ペット可」ページ初回 500 | cold start 時 5.5s で 500 | 同上 | featured 公開ページ | 重大 | 修正済 (force-dynamic 撤去 / revalidate=300 / maxDuration=30) |
+| R24-03 | market-price?category=house warm 5.2s | 戸建を選ぶたびに 5 秒待ち | category=house 指定 | revalidate なし + 大規模スキャン | 相場ツール | 中 | 部分修正 (CDN cache 強化 + maxDuration=30); 真の解は composite index (issues.md) |
+| R24-04 | properties/locations 219KB payload | 物件マップ初回読込が重い | / map 開いた瞬間 | force-dynamic で CDN キャッシュ無効化 | 物件マップ | 中 | 修正済 (revalidate=300; payload 圧縮は別件) |
 
 ---
 

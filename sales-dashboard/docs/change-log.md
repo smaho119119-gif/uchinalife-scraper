@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-04-28 — Round 24 (本番パフォーマンス監査の P0/P1 を一括対応)
+
+### 監査結果サマリ (quality-engineer サブエージェント)
+- **致命**: `/api/analytics/diff` が cold で 10.06s ちょうどで 500 (Vercel 関数の既定 10s タイムアウト)
+- **致命**: `/api/sales/featured/pet-friendly` cold で 5.5s で 500
+- **遅い**: `/api/sales/market-price?category=house` warm で 5.2s
+- **遅い**: `/api/properties/locations` cold 3.9s / warm 1.15s, payload 219KB
+- 認証必須ページは全て 307 で 145–261ms、安全
+
+### 修正内容
+- 7 ルートで `dynamic = 'force-dynamic'` を撤去 → `revalidate` を実効化:
+  - `/api/analytics/diff` (revalidate=300, max=30)
+  - `/api/analytics/trends` (revalidate=300, max=30)
+  - `/api/analytics/properties` (revalidate=60, max=30)
+  - `/api/sales/featured/pet-friendly` (revalidate=300, max=30)
+  - `/api/sales/featured/by-area` (revalidate=600, max=30)
+  - `/api/sales/featured/new-listings` (revalidate=300, max=30)
+  - `/api/sales/area-stats` (revalidate=300, max=30)
+  - `/api/properties/locations` (revalidate=300, max=30)
+  - `/api/sales/market-price` (revalidate=600, max=30) + 内部キャッシュ命中時にも `Cache-Control: public, s-maxage=600, stale-while-revalidate=86400` を発行
+
+### 期待効果
+- diff/pet-friendly の cold 500 はキャッシュヒットで回避、ミス時は 30s 予算で完走
+- market-price?category=house は CDN 命中で sub-100ms に
+- locations / new-listings の payload は CDN レイヤで重複転送が消える
+
+### 副作用チェック
+- `npx tsc --noEmit` → 0 errors
+- `npx next build` → 全ルート生成成功 (動的→静的化はせず ƒ のまま、revalidate のみ有効化)
+- 機能挙動は全ルートで不変、レスポンス内容は同一
+
+### 残課題 (issues.md)
+- 真の根本治療は (a) `analytics_diff` を SECURITY DEFINER の単一 RPC に統合 (b) `properties (category, area)` 複合 index 作成。両方とも Supabase 側操作なので R25 以降で計画。
+
+---
+
 ## 2026-04-26 — Round 23 (CategoryId 型強制で typo 再発防止)
 
 ### 修正内容

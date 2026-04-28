@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase-server';
 import { parseIntParam, jsonError, logAndSerializeError } from '@/lib/api-utils';
 
-export const dynamic = 'force-dynamic';
+// Daily aggregates — same pattern as analytics/diff (R23-perf).
+export const maxDuration = 30;
 export const revalidate = 300;
 
 export async function GET(request: Request) {

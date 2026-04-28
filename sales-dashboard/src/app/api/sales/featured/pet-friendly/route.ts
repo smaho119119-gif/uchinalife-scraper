@@ -4,8 +4,9 @@ import { safeParseJson } from '@/lib/json';
 import { isValidCategory } from '@/lib/categories';
 import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 
-export const dynamic = 'force-dynamic';
-
+// R23-perf: drop force-dynamic so framework + CDN can cache the public list.
+// The result is the same for every visitor for ~5min.
+export const maxDuration = 30;
 export const revalidate = 300;
 
 export async function GET(request: NextRequest) {

@@ -4,7 +4,9 @@ import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { isValidCategory } from '@/lib/categories';
 import { parseIntParam, jsonError, logAndSerializeError } from '@/lib/api-utils';
 
-export const dynamic = 'force-dynamic';
+// R23-perf: drop force-dynamic so framework + CDN can serve from cache.
+export const maxDuration = 30;
+export const revalidate = 60;
 
 const JST = 'Asia/Tokyo';
 const ALLOWED_FILTERS = ['active', 'inactive', 'newToday', 'soldToday'] as const;

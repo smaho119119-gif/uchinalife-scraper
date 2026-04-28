@@ -4,8 +4,8 @@ import { safeParseJson } from '@/lib/json';
 import { parseIntParam, jsonError, logAndSerializeError } from '@/lib/api-utils';
 import { isValidCategory } from '@/lib/categories';
 
-export const dynamic = 'force-dynamic';
-
+// R23-perf: drop force-dynamic so framework + CDN can serve from cache.
+export const maxDuration = 30;
 export const revalidate = 300;
 
 export async function GET(request: NextRequest) {

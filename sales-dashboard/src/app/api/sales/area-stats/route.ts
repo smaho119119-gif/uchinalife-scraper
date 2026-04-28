@@ -4,8 +4,8 @@ import { getCityCoordinates, getRegionFull } from '@/lib/area';
 import { isValidCategory } from '@/lib/categories';
 import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 
-export const dynamic = 'force-dynamic';
-
+// R23-perf: drop force-dynamic so framework + CDN can serve from cache.
+export const maxDuration = 30;
 export const revalidate = 300;
 
 const ALLOWED_TYPES = ['rent', 'sale', 'all'] as const;

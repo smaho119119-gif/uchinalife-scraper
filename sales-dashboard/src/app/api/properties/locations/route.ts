@@ -3,7 +3,9 @@ import { safeParseJson } from '@/lib/json';
 import { supabase } from '@/lib/db';
 import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 
-export const dynamic = 'force-dynamic';
+// R23-perf: drop force-dynamic so framework + CDN can serve from cache.
+export const maxDuration = 30;
+export const revalidate = 300;
 
 // Cache for 5 minutes
 interface MarkerCacheRecord { markers: unknown[]; timestamp: number }

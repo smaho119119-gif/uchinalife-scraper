@@ -3,7 +3,8 @@ import { getSupabase } from '@/lib/supabase-server';
 import { isValidCategory } from '@/lib/categories';
 import { jsonError, logAndSerializeError } from '@/lib/api-utils';
 
-export const dynamic = 'force-dynamic';
+// R23-perf: drop force-dynamic so framework + CDN can serve from cache.
+export const maxDuration = 30;
 export const revalidate = 600;
 
 export async function GET(request: NextRequest) {

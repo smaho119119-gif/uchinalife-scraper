@@ -11,7 +11,10 @@ import {
 } from "@/lib/price";
 import { extractCityName, getAdjacentCities } from "@/lib/area";
 
-export const dynamic = 'force-dynamic';
+// Market price queries scan up to ~21k rows (`category=house`); R23-perf
+// observed 5s warm latency. Allow a 30s budget so a cold scan can't 500.
+export const maxDuration = 30;
+export const revalidate = 600;
 
 // ---------------------------------------------------------------------------
 // Supabase client (same pattern as analytics/areas/route.ts)
@@ -297,7 +300,9 @@ export async function GET(request: NextRequest) {
     const cacheKey = `market-price:${area}:${category}:${madori ?? ""}:${ageMax ?? ""}`;
     const cached = getCached(cacheKey);
     if (cached) {
-      return NextResponse.json(cached);
+      return NextResponse.json(cached, {
+        headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=86400' },
+      });
     }
 
     // ---- Fetch & filter ------------------------------------------------------
@@ -420,7 +425,9 @@ export async function GET(request: NextRequest) {
 
     setCache(cacheKey, responseBody);
 
-    return NextResponse.json(responseBody);
+    return NextResponse.json(responseBody, {
+      headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=86400' },
+    });
   } catch (error: unknown) {
     return jsonError(logAndSerializeError("sales/market-price", error));
   }
