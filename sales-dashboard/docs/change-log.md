@@ -34,6 +34,23 @@
 ### 残課題 (issues.md)
 - 真の根本治療は (a) `analytics_diff` を SECURITY DEFINER の単一 RPC に統合 (b) `properties (category, area)` 複合 index 作成。両方とも Supabase 側操作なので R25 以降で計画。
 
+## 2026-04-28 — Round 24b (cold-start 500 のクライアント側リカバリ + Cron warmup)
+
+### 背景
+- R24 の本番 smoke で `analytics/diff?days=7` の cold が 10.42s で 500 のまま
+- Vercel Hobby プランは関数最大実行時間 10s 固定 (`maxDuration` 値は無視)
+- そのまま 30 秒 budget は得られないため、**cold を「踏ませない」+「踏んでも回復」** の二重防御に切替
+
+### 修正内容
+- `vercel.json` 新設: 5 分おきに `/api/analytics/diff?days=7` と `/api/analytics/trends?days=30`、10 分おきに `/api/sales/market-price?area=那覇市&category=house` を Cron で warmup ping → 関数を常時 warm に保つ
+- `src/lib/use-api.ts`: 5xx を受けたら 1 回だけ自動リトライ。cold 500 の直後に warm 200 が来るため、ユーザーには Loading が 1〜2 秒長く見えるだけで成功する
+
+### 副作用チェック
+- `npx tsc --noEmit` → 0 errors
+- `npx next build` → 全ルート生成成功
+- リトライは 5xx のみで実行 (4xx は即停止)、AbortController キャンセル時も再試行しない
+- Vercel Cron は production デプロイ後、自動で稼働開始
+
 ---
 
 ## 2026-04-26 — Round 23 (CategoryId 型強制で typo 再発防止)

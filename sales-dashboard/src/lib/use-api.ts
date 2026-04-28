@@ -40,14 +40,23 @@ export function useApi<T>(
 
         setState((s) => ({ ...s, loading: true, error: null }));
 
-        fetch(url, { ...options, signal: ctrl.signal })
-            .then(async (res) => {
-                if (!res.ok) {
-                    const body = await res.text().catch(() => '');
-                    throw new Error(`${res.status} ${res.statusText}${body ? `: ${body.slice(0, 200)}` : ''}`);
+        // R24: Vercel Hobby caps function duration at 10s, so cold starts on
+        // heavy aggregate routes (`/api/analytics/diff`) can 500 the very
+        // first hit. Auto-retry once on 5xx — second hit warms the function
+        // and almost always succeeds in <2s.
+        const attempt = async (retriesLeft: number): Promise<T> => {
+            const res = await fetch(url, { ...options, signal: ctrl.signal });
+            if (!res.ok) {
+                if (res.status >= 500 && retriesLeft > 0) {
+                    return attempt(retriesLeft - 1);
                 }
-                return res.json();
-            })
+                const body = await res.text().catch(() => '');
+                throw new Error(`${res.status} ${res.statusText}${body ? `: ${body.slice(0, 200)}` : ''}`);
+            }
+            return res.json();
+        };
+
+        attempt(1)
             .then((data: T) => {
                 if (ctrl.signal.aborted) return;
                 setState({ data, error: null, loading: false });

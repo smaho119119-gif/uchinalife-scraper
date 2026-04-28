@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/analytics/diff?days=7",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/analytics/trends?days=30",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/sales/market-price?area=%E9%82%A3%E8%A6%87%E5%B8%82&category=house",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
