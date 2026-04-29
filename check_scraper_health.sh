@@ -30,21 +30,32 @@ else
     echo "ALERT: launchd agent is NOT loaded! Run: launchctl load ~/Library/LaunchAgents/com.uchinalife.scraper.plist"
 fi
 
-# Check 4: Count consecutive failures
+# Check 4: Count *current* consecutive failure streak (today backwards).
+# Walk back day-by-day until we hit a success marker. Window 14 days so a
+# long-running outage is still surfaced (B-005). The previous loop counted
+# correctly only by accident — any partial recovery reset the counter.
 FAIL_COUNT=0
-for i in $(seq 0 6); do
+for i in $(seq 0 13); do
+    CHECK_DATE=$(date -v-${i}d +%Y%m%d)
+    if [ -f "${LOGS_DIR}/success_${CHECK_DATE}.marker" ]; then
+        break
+    fi
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+done
+
+# Also count total missed days in the same window for context
+TOTAL_MISSED=0
+for i in $(seq 0 13); do
     CHECK_DATE=$(date -v-${i}d +%Y%m%d)
     if [ ! -f "${LOGS_DIR}/success_${CHECK_DATE}.marker" ]; then
-        FAIL_COUNT=$((FAIL_COUNT + 1))
-    else
-        break
+        TOTAL_MISSED=$((TOTAL_MISSED + 1))
     fi
 done
 
 if [ $FAIL_COUNT -ge 3 ]; then
-    echo "CRITICAL: $FAIL_COUNT consecutive days without success!"
+    echo "CRITICAL: $FAIL_COUNT consecutive days without success! (missed ${TOTAL_MISSED}/14 days in last 2 weeks)"
 elif [ $FAIL_COUNT -ge 1 ]; then
-    echo "WARNING: $FAIL_COUNT day(s) without success."
+    echo "WARNING: $FAIL_COUNT day(s) without success. (missed ${TOTAL_MISSED}/14 days in last 2 weeks)"
 else
-    echo "OK: No missed days."
+    echo "OK: No missed days. (missed ${TOTAL_MISSED}/14 days in last 2 weeks)"
 fi
