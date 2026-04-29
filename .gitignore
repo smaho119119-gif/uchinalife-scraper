@@ -31,6 +31,14 @@ wheels/
 # Logs
 logs/*.log
 *.log
+logs/*.marker
+logs/last_run.json
+logs/run_daily_scraper.pid
+logs/manual_run_*.log
+
+# SQLite leftovers at repo root
+/properties.db
+/properties.db-journal
 
 # Database (ローカルのみ)
 output/properties.db
