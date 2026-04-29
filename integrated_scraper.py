@@ -220,8 +220,30 @@ def get_thread_browser() -> Browser:
     return _thread_local.browser
 
 def get_thread_context():
-    """Get or create a browser context for the current thread"""
-    if not hasattr(_thread_local, 'context') or _thread_local.context is None:
+    """Get or create a browser context for the current thread.
+
+    Detects a closed/invalid context (left over after a browser restart
+    triggered by MAX_BROWSER_USES) and rebuilds it instead of returning a
+    dead handle. Without this, callers see "Target page, context or browser
+    has been closed" until the worker thread dies (B-NEW2).
+    """
+    needs_new = (
+        not hasattr(_thread_local, 'context')
+        or _thread_local.context is None
+    )
+    if not needs_new:
+        try:
+            # new_page failure on a closed context is the cheapest probe.
+            _thread_local.context.pages  # property access; raises if dead
+        except Exception:
+            try:
+                _thread_local.context.close()
+            except Exception:
+                pass
+            _thread_local.context = None
+            needs_new = True
+
+    if needs_new:
         browser = get_thread_browser()
         _thread_local.context = create_browser_context(browser)
 

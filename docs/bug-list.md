@@ -95,6 +95,25 @@
 - **対応方針**: 値を引き上げ（200）してリブート頻度を下げる + close失敗時に PID kill フォールバック
 - **状況**: 修正済 (commit `refactor(scraper): reduce browser restart churn`)
 
+## B-NEW1 [中] auto_diagnose_and_fix が gtimeout 管理外で subprocess 起動
+
+- **症状**: 再試行のための `subprocess.run([python, script_path, ...])` が gtimeout の親 PID 木の外で動く可能性。
+- **根本原因**: [integrated_scraper.py:1109](../integrated_scraper.py#L1109) で `subprocess.run` を直接叩く。
+- **影響範囲**: 親が SIGTERM/SIGKILL を受けた瞬間に子は孤児化し得るが、`run_daily_scraper.sh` 末尾の `pkill -9 -f integrated_scraper.py` が確実に掃除するため実害は最小。
+- **優先度**: 中 → 軽微（Round 1 のシェル側 pkill が緩和済み）
+- **対応方針**: 現状維持。decisions.md D-007 に記載。再発時は本格対応。
+- **状況**: 緩和済み（コード変更なし、運用判断）
+
+## B-NEW2 [中] 閉じた browser context を返してしまうレース
+
+- **症状**: scraper.log に `Target page, context or browser has been closed` が混入。
+- **再現条件**: `MAX_BROWSER_USES` 到達時に `get_thread_browser` が context を None リセットするが、別スレッドが同時に古い `_thread_local` を参照していると無効化が遅れる。あるいは別経路で context が close された場合に検出できない。
+- **根本原因**: [integrated_scraper.py:222-228](../integrated_scraper.py#L222-L228) の旧 `get_thread_context()` は `is None` チェックのみで、closed-but-not-None を検出しない。
+- **影響範囲**: `scrape_detail` の `context.new_page()` 失敗 → 当該URLのみエラー。Errors カウンタには載るが checkpoint は更新される。
+- **優先度**: 中
+- **対応方針**: `get_thread_context` でアクセス試行による生存確認を実施。closed なら再生成。
+- **状況**: 修正済 (Round 2 commit `fix(scraper): rebuild browser context when closed`)
+
 ## B-010 [軽微] launchd plist の StartCalendarInterval が単発（バックフィル無し）
 
 - **症状**: Mac がスリープしていると 03:00 のジョブが skip される

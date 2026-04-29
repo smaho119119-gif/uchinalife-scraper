@@ -43,3 +43,14 @@
 - **変更**: `MAX_BROWSER_USES` のデフォルトを 50 → 200
 - **影響**: 同一 browser での再利用回数が増え、close→launch のリスクが減る
 - **副作用チェック**: 環境変数 `SCRAPER_MAX_BROWSER_USES` で上書き可能の挙動は維持
+
+## 2026-04-29 — Round 2: secondary defects from re-audit
+
+### B-NEW2 fix(scraper): rebuild browser context when closed
+- **変更**: `get_thread_context` で `_thread_local.context.pages` プロパティアクセスによる生存確認を追加。死んでいたら破棄→再生成。
+- **影響**: `Target page, context or browser has been closed` エラーの再発を防止。
+- **副作用チェック**:
+  - 呼び出し元（`scrape_detail` / 内部リトライ）は `get_thread_context()` の戻り値を `context.new_page()` に渡すだけなので、戻り値型は不変
+  - `_thread_local.context` のライフサイクルが「None / 生存している context」の二状態のまま
+  - エラーパスで context.close() を呼ぶが既に死んでいるので例外を握りつぶす（既存のスタイルに合わせて Exception を捕捉）
+  - スレッド固有変数なのでロック不要
