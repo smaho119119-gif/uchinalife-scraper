@@ -29,6 +29,15 @@
 - **理由**: Round 1 の `run_daily_scraper.sh` の末尾 `pkill -9 -f integrated_scraper.py` が孤児を確実に掃除する。再帰は `AUTO_RETRY_COUNT` で 2 回までに制限。実害は観測されていない。
 - **代替案不採用**: 「shell 経由で再起動」案 → pidfile lock を壊すか、bypass フラグを増やす副作用が出る
 
+## D-009 「直前の取得」を日付ではなく ORDER BY OFFSET 1 で表現
+
+- **決定**: `daily_link_snapshots` のスキーマは変更せず、`get_previous_snapshot_links` で `ORDER BY snapshot_date DESC, scraped_at DESC LIMIT 1 OFFSET 1` により「自分の最新を除いた最新」を取る。`get_previous_links` は legacy alias として残置（外部診断スクリプト互換）。
+- **理由**: 旧設計は「昨日のスナップショット」を `snapshot_date < today` で取りに行くため、1日でも失敗するとスナップショットの穴で「該当無し → 全件 new」 → 全件再スクレイプ → タイムアウト → さらに穴を増やす負のループ。OFFSET 1 にすれば日付の穴を自然にスキップする。
+- **代替案不採用**:
+  - **B案 (履歴化スキーマ)**: PRIMARY KEY を id にして同日複数行許容。「直前の取得」をジョブ粒度で正確に取れるが、Supabase migration 必要 + 既存データの整合考慮で実装コスト大。同日複数回起動は通常運用でゼロ → A案で十分。
+  - **C案 (DB の properties テーブルから直接 active な URL 集合を取る)**: 真実のソースを DB に統一する案。クエリは安いが「最後にスクレイプされたかどうか」と「リスト上に存在するかどうか」が混ざるため意味が変わる。今回は変更スコープ外。
+- **副次効果**: 同日2回目に手動起動すると、OFFSET 1 で「**昨日**」を取る（朝の自分自身ではなく）。1日1回の通常運用では完全に同等。同日連打は通常起きないので許容。
+
 ## D-008 get_thread_context の生存確認
 
 - **決定**: closed-but-not-None な context をプロパティアクセスで検出して再生成。

@@ -291,54 +291,67 @@ class Database:
             print(f"Error saving link snapshot to Supabase: {e}")
             return False
     
-    def get_previous_links(self, category: str, days_back: int = 1) -> List[str]:
-        """Get links from most recent snapshot (not strictly days_back)"""
+    def get_previous_snapshot_links(self, category: str) -> List[str]:
+        """Return URLs from the snapshot immediately preceding the current one.
+
+        Selection is driven by sort order (date DESC, scraped_at DESC) with
+        OFFSET 1, so it is always "the snapshot taken before the most recent
+        one for this category", regardless of calendar date. This avoids the
+        old behaviour where any single missing day's snapshot collapsed diff
+        detection back to "every URL is new" — and thus avoids the 4,000-URL
+        scrape that timed out daily.
+
+        On the very first run for a category the table has zero or one row;
+        OFFSET 1 returns nothing and we fall back to "no previous snapshot"
+        which the caller treats as "everything is new".
+        """
         if self.db_type == "sqlite":
-            return self._get_previous_links_sqlite(category, days_back)
+            return self._get_previous_snapshot_links_sqlite(category)
         else:
-            return self._get_previous_links_supabase(category, days_back)
-    
-    def _get_previous_links_sqlite(self, category: str, days_back: int) -> List[str]:
-        """SQLite implementation"""
+            return self._get_previous_snapshot_links_supabase(category)
+
+    # Legacy alias — keep callers compiling while we migrate.
+    def get_previous_links(self, category: str, days_back: int = 1) -> List[str]:
+        """Deprecated: use get_previous_snapshot_links. days_back is ignored
+        and was historically misleading (B-NEW3)."""
+        return self.get_previous_snapshot_links(category)
+
+    def _get_previous_snapshot_links_sqlite(self, category: str) -> List[str]:
+        """SQLite: pick the row with the second-most-recent (date, scraped_at)."""
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
-        
         try:
-            today = date.today().isoformat()
             cursor.execute("""
                 SELECT urls, snapshot_date FROM daily_link_snapshots
-                WHERE category = ? AND snapshot_date < ?
-                ORDER BY snapshot_date DESC
-                LIMIT 1
-            """, (category, today))
-            
+                WHERE category = ?
+                ORDER BY snapshot_date DESC, scraped_at DESC
+                LIMIT 1 OFFSET 1
+            """, (category,))
+
             result = cursor.fetchone()
             if result:
                 print(f"[{category}] Using snapshot from {result[1]} for diff detection")
                 return json.loads(result[0])
-            
+
             print(f"[{category}] No previous snapshot found - treating all as new")
             return []
         finally:
             conn.close()
-    
-    def _get_previous_links_supabase(self, category: str, days_back: int) -> List[str]:
-        """Supabase implementation"""
-        today = date.today().isoformat()
-        
-        # Order by snapshot_date DESC, limit 1, filter date < today
+
+    def _get_previous_snapshot_links_supabase(self, category: str) -> List[str]:
+        """Supabase: same logic via .range(1, 1)."""
         result = self.supabase.table("daily_link_snapshots")\
             .select("urls, snapshot_date")\
             .eq("category", category)\
-            .lt("snapshot_date", today)\
             .order("snapshot_date", desc=True)\
-            .limit(1)\
+            .order("scraped_at", desc=True)\
+            .range(1, 1)\
             .execute()
-        
+
         if result.data:
             print(f"[{category}] Using snapshot from {result.data[0]['snapshot_date']} for diff detection")
-            return result.data[0]["urls"] # supabase-py converts JSON to list auto
-        
+            return result.data[0]["urls"]
+
         print(f"[{category}] No previous snapshot found - treating all as new")
         return []
     

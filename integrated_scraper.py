@@ -1033,14 +1033,22 @@ def export_to_csv():
         print(f"Error exporting to CSV: {e}")
 
 def detect_diff(category: str, current_urls: list) -> tuple:
-    """Detect new and sold properties"""
+    """Detect new and sold properties.
+
+    Compares the URL set we just collected against the snapshot taken on the
+    *previous* run for this category — chosen by sort order, not by calendar
+    date. This keeps diff detection working even after a long outage where
+    yesterday's snapshot is missing (which previously collapsed the diff back
+    to "every URL is new" and triggered a full re-scrape that never finished
+    inside the 2h timeout window).
+    """
     current_set = set(current_urls)
-    previous_urls = db.get_previous_links(category, days_back=1)
+    previous_urls = db.get_previous_snapshot_links(category)
     previous_set = set(previous_urls)
-    
+
     new_urls = list(current_set - previous_set)
     sold_urls = list(previous_set - current_set)
-    
+
     return new_urls, sold_urls
 
 def auto_diagnose_and_fix(total_scraped: int, max_retries: int = 2):

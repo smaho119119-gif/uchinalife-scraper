@@ -55,6 +55,23 @@
   - エラーパスで context.close() を呼ぶが既に死んでいるので例外を握りつぶす（既存のスタイルに合わせて Exception を捕捉）
   - スレッド固有変数なのでロック不要
 
+## 2026-04-29 — Round 4: diff detection no longer depends on calendar date
+
+### B-NEW3 fix(db): pick previous snapshot by sort order, not by calendar date
+- **背景**: ユーザ指摘「前日との差分ではなく『前回の取得』との差分が筋」。実装は「`snapshot_date < today`」で日付ベースだったため、ジョブが連続失敗してスナップショットの日付に穴が空くと、`get_previous_links` が空リストを返す → 全件 new 扱い → 4,681 件全件スクレイプ → 2時間タイムアウト → 翌日のスナップショットも残らない、という**負のループ**を生んでいた。実際これが 4/25〜4/29 の 5 日連続失敗の主因の一つ（B-001 の checkpoint 破損と並ぶ）。
+- **変更**:
+  - `database.py` に `get_previous_snapshot_links(category)` を新設。`ORDER BY snapshot_date DESC, scraped_at DESC LIMIT 1 OFFSET 1` で「自分の最新を除いた最新」を取得。日付には依存しない。
+  - `get_previous_links` を legacy alias として残置（`check_supabase.py` などの外部スクリプト互換）。`days_back` 引数は明示的に「ignored」と docstring 化。
+  - `integrated_scraper.detect_diff` を新名に切り替え。
+- **副作用チェック**:
+  - 呼び出し元 grep: `integrated_scraper.py:1038` の1箇所のみ → 修正済。`check_supabase.py` の 2 箇所は alias 経由で動く（戻り値型・例外挙動とも不変）
+  - スキーマ変更なし。Supabase migration も不要
+  - SQLite 8 シナリオ実機テスト（`get_previous_snapshot_links` の単体・連続失敗復旧・同日上書き・カテゴリ独立性・legacy alias）すべてPASS
+  - 復旧シナリオ: 7日間スナップショット欠損 → 8日目のジョブが正しく 7日前のスナップショットを「previous」として扱い、全件 new ではなく差分のみスクレイプすることを確認
+
+### Verification: regression on running scrape
+- 15:12 起動の手動ジョブは旧ロジックで `house: 4681 / 4681 件` を全件 new と誤判定し timeout に向かっていた。新ロジックなら同じ条件下でも `house: ~50件` 規模に収まるはず（4/27 のスナップショットがあれば）。次回 launchd 起動 (4/30 03:00) で実証される。
+
 ## 2026-04-29 — Round 3: post-fix verification & checkpoint recovery
 
 ### Manual checkpoint repair
