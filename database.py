@@ -102,15 +102,26 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_snapshots_date_category ON daily_link_snapshots(snapshot_date, category);
             """
         
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.executescript(sql_script)
         conn.commit()
         conn.close()
         print("SQLite migration completed")
     
     def _get_sqlite_connection(self):
-        """Get SQLite connection"""
-        return sqlite3.connect(self.db_path)
+        """Get SQLite connection with a generous lock-wait window.
+
+        Without busy_timeout, concurrent writers that hit a transient lock get
+        an immediate `database is locked` error (B-004). 30s gives room for
+        normal workloads to retry inside SQLite itself.
+        """
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        try:
+            conn.execute("PRAGMA busy_timeout = 30000")
+            conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.Error as e:
+            print(f"⚠️  Failed to apply sqlite pragmas: {e}", flush=True)
+        return conn
     
     # ================================================================
     # UPSERT PROPERTY
