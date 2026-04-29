@@ -3,6 +3,9 @@
 ## 高優先（次ラウンド）
 - [ ] `except: pass` を logger.warning に置き換える（残り20箇所程度）
 - [ ] `print()` を logging モジュールに統一（big change のため計画立案要）
+- [ ] B-NEW3: `get_previous_links` の `days_back` 引数を実装するか、命名を実態に合わせる
+- [ ] B-NEW4: 進捗表示の刻み判定を「前回 +10 超えたら」式に
+- [ ] B-NEW5: scrape_detail の try/except を `_safe_get_text` ヘルパへ集約
 
 ## 中優先
 - [ ] Supabase 経由のときに `_get_sqlite_connection` 互換のリトライを RPC 側にも整備

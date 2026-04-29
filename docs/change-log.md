@@ -54,3 +54,21 @@
   - `_thread_local.context` のライフサイクルが「None / 生存している context」の二状態のまま
   - エラーパスで context.close() を呼ぶが既に死んでいるので例外を握りつぶす（既存のスタイルに合わせて Exception を捕捉）
   - スレッド固有変数なのでロック不要
+
+## 2026-04-29 — Round 3: post-fix verification & checkpoint recovery
+
+### Manual checkpoint repair
+- **動作**: 旧来の破損 checkpoint.json (line 17913 で Extra data) を `JSONDecoder.raw_decode` で先頭 1 オブジェクトだけ救出し、`.corrupt.YYYYMMDD_HHMMSS` に元ファイルを退避してから書き戻し。
+- **影響**: 翌日からの load_checkpoint がエラー無く動く。今日付けでは無いので stale 判定→新規スタート（仕様通り）。
+- **副作用チェック**: `python -c 'json.load(...)'` でバリデーション通過。退避ファイルは追跡しない（.gitignore の `output/` で除外）
+
+### Verification: end-to-end smoke tests
+- save/load same-day → expected URL set 復元
+- corrupt → quarantine → empty set
+- post-quarantine の新規書き込みが正常 JSON
+- 4 スレッド × 100 件並行書き込みで JSON 破壊なし
+
+### Verification: shell-side defenses
+- pidfile が生存 PID を指している間は新ジョブ起動を拒否（ログに "Another scraper run is in progress"）
+- 死んだ PID を指している場合は stale クリーンアップして続行
+- check_scraper_health.sh が「直近の連続失敗 5 日 / 過去14日中 11日欠損」を正しく報告

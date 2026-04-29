@@ -104,6 +104,33 @@
 - **対応方針**: 現状維持。decisions.md D-007 に記載。再発時は本格対応。
 - **状況**: 緩和済み（コード変更なし、運用判断）
 
+## B-NEW3 [軽微] get_previous_links の days_back 引数が無視
+
+- **症状**: 引数 `days_back: int = 1` を受けるが、実装は単に `snapshot_date < today` で最新1件を返すのみ。指定値が反映されない。
+- **根本原因**: [database.py:294-323](../database.py#L294-L323) のシグネチャと実装が乖離。
+- **影響範囲**: 現在の呼び出し箇所は `days_back=1` 固定なので実害なし。将来 `days_back=7` を渡しても挙動は同じで、誤解を招く。
+- **優先度**: 軽微
+- **対応方針**: 命名を `get_most_recent_previous_links` に変更するか、days_back を実装。現状は todo に記録。
+- **状況**: 未対応 (todo.md)
+
+## B-NEW4 [軽微] 進捗表示の `% 10 == 0` 判定が誤ヒット
+
+- **症状**: scraped_count + error_count == 1340 で error が 1 出ると 1341 になり 10 件単位で揃わない。
+- **根本原因**: [integrated_scraper.py:1340-1341](../integrated_scraper.py#L1340-L1341) で `(scraped_count + error_count) % 10 == 0` のみ判定。
+- **影響範囲**: ログの読みやすさのみ。
+- **優先度**: 軽微
+- **対応方針**: 「合計が10刻みではなく、合計が前回出力時点+10超えたら出す」ロジックに変更。todo.md
+- **状況**: 未対応 (todo.md)
+
+## B-NEW5 [軽微] scrape_detail 内に try/except のテンプレ重複
+
+- **症状**: 各フィールド取得が同じ「`try: 取得; except: data[k] = ""`」を繰り返している。
+- **根本原因**: ヘルパー抽出されていない。意図は「ベストエフォート」で例外時は空。
+- **影響範囲**: 保守性。バグ予備軍ではない。
+- **優先度**: 軽微
+- **対応方針**: `_safe_get_text(page, selector)` ヘルパに抽出。今回スコープ外。todo.md
+- **状況**: 未対応 (todo.md)
+
 ## B-NEW2 [中] 閉じた browser context を返してしまうレース
 
 - **症状**: scraper.log に `Target page, context or browser has been closed` が混入。
