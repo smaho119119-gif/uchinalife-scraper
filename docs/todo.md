@@ -7,6 +7,9 @@
 - [ ] B-NEW4: 進捗表示の刻み判定を「前回 +10 超えたら」式に
 - [ ] B-NEW5: scrape_detail の try/except を `_safe_get_text` ヘルパへ集約
 
+## 中優先（Round 5 で追加）
+- [ ] `auto_diagnose_and_fix` の判定ロジックを見直す。`new_properties` count と Supabase の `count="exact"` クエリが整合しない構造的問題があり、save_rate <10% の閾値が誤発火する。現状は subprocess 再起動が DNS で死んでくれて実害ゼロだが、将来の不安定要素。閾値判定を全面的に取り除くか、DB 側の `created_at` 範囲を実際のスクレイプ開始時刻にバインドする。
+
 ## 中優先
 - [ ] Supabase 経由のときに `_get_sqlite_connection` 互換のリトライを RPC 側にも整備
 - [ ] launchd の RunAtLoad / 復帰時実行の運用判断（issues.md I-001）

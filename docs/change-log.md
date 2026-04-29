@@ -55,6 +55,21 @@
   - エラーパスで context.close() を呼ぶが既に死んでいるので例外を握りつぶす（既存のスタイルに合わせて Exception を捕捉）
   - スレッド固有変数なのでロック不要
 
+## 2026-04-30 — Round 5: real-world validation
+
+- **4/29 manual run completed**: 5,308 properties scraped (errors 0), CSV
+  exported for all 8 categories, success_20260429.marker created. The 5-day
+  failure streak is broken.
+- **4/30 launchd run completed automatically** for the first time on the new
+  code: success_20260430.marker exists, last_run.json reports status=success.
+  This validates the fix end-to-end without manual intervention.
+- One quirk surfaced during the manual run: `auto_diagnose_and_fix`
+  mistakenly read the new-properties total as a "save rate <10%" failure and
+  spawned a recursive subprocess. The child died immediately on a DNS error
+  and the parent completed cleanly, so no harm done — but the logic is
+  fragile and worth tightening (see todo). The shell-side cleanup (pkill -9,
+  trap-based pidfile removal) all behaved as designed.
+
 ## 2026-04-29 — Round 4: diff detection no longer depends on calendar date
 
 ### B-NEW3 fix(db): pick previous snapshot by sort order, not by calendar date
