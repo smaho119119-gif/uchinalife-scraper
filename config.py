@@ -44,7 +44,9 @@ class Config:
     # =====================================================
     # ブラウザ設定
     # =====================================================
-    MAX_BROWSER_USES: int = int(os.getenv("SCRAPER_MAX_BROWSER_USES", "50"))
+    # 200: each thread keeps a single browser longer to reduce close→launch
+    # churn that occasionally leaks Chromium processes (B-009).
+    MAX_BROWSER_USES: int = int(os.getenv("SCRAPER_MAX_BROWSER_USES", "200"))
     
     # =====================================================
     # カテゴリー設定

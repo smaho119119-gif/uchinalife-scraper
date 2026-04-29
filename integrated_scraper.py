@@ -109,6 +109,9 @@ _request_lock = threading.Lock()
 _all_thread_browsers = []
 _browsers_lock = threading.Lock()
 
+# Serialize checkpoint writes — JSON file corruption otherwise (B-001)
+_checkpoint_lock = threading.Lock()
+
 # Thread-local storage
 _thread_local = threading.local()
 
@@ -135,10 +138,15 @@ def _cleanup_all_browsers():
 atexit.register(_cleanup_all_browsers)
 
 def _signal_handler(signum, frame):
-    """Handle SIGTERM/SIGINT to cleanup browser"""
-    print(f"\nReceived signal {signum}, cleaning up...", flush=True)
-    _cleanup_all_browsers()
-    sys.exit(1)
+    """Handle SIGTERM/SIGINT — exit immediately.
+
+    Calling _cleanup_all_browsers() here used to deadlock because Playwright's
+    sync API holds locks owned by worker threads (see B-002). The shell wrapper
+    is now responsible for force-killing leftover Chromium via gtimeout
+    --kill-after and pkill -9.
+    """
+    print(f"\nReceived signal {signum}, exiting immediately.", flush=True)
+    os._exit(1)
 
 signal.signal(signal.SIGTERM, _signal_handler)
 signal.signal(signal.SIGINT, _signal_handler)
@@ -474,36 +482,63 @@ def save_links_with_metadata(links_file, all_links):
     print(f"Saved {total_links} links with metadata to {links_file}")
 
 def save_checkpoint(checkpoint_file, category, processed_urls):
-    """Save checkpoint for resuming scraping"""
-    try:
-        # Load existing checkpoint
-        checkpoint = {}
-        if os.path.exists(checkpoint_file):
-            with open(checkpoint_file, "r", encoding="utf-8") as f:
-                checkpoint = json.load(f)
-        
-        # Update checkpoint for this category
-        checkpoint[category] = {
-            "processed_urls": list(processed_urls),
-            "count": len(processed_urls),
-            "last_updated": datetime.now().isoformat()
-        }
-        
-        # Save checkpoint
-        with open(checkpoint_file, "w", encoding="utf-8") as f:
-            json.dump(checkpoint, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"Error saving checkpoint: {e}")
+    """Save checkpoint for resuming scraping.
+
+    Thread-safe & atomic. Without these guarantees concurrent workers corrupt
+    the JSON file (see B-001 in docs/bug-list.md), which silently disables
+    progress persistence and forces full re-scrape every run.
+    """
+    with _checkpoint_lock:
+        try:
+            # Load existing checkpoint (skip if corrupt — start clean rather than
+            # propagate corruption forever)
+            checkpoint = {}
+            if os.path.exists(checkpoint_file):
+                try:
+                    with open(checkpoint_file, "r", encoding="utf-8") as f:
+                        checkpoint = json.load(f)
+                except json.JSONDecodeError as je:
+                    print(f"⚠️  Existing checkpoint is corrupt ({je}); rebuilding from scratch.", flush=True)
+                    checkpoint = {}
+
+            checkpoint[category] = {
+                "processed_urls": list(processed_urls),
+                "count": len(processed_urls),
+                "last_updated": datetime.now().isoformat()
+            }
+
+            # Atomic write: tmp file + rename
+            tmp_file = f"{checkpoint_file}.tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(checkpoint, f, ensure_ascii=False, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_file, checkpoint_file)
+        except Exception as e:
+            print(f"Error saving checkpoint: {e}", flush=True)
 
 def load_checkpoint(checkpoint_file, category):
-    """Load checkpoint to resume scraping"""
+    """Load checkpoint to resume scraping.
+
+    If the checkpoint file is corrupt (B-001), quarantine it and start fresh
+    instead of crashing or returning stale data.
+    """
     try:
         if not os.path.exists(checkpoint_file):
             return set()
-        
-        with open(checkpoint_file, "r", encoding="utf-8") as f:
-            checkpoint = json.load(f)
-        
+
+        try:
+            with open(checkpoint_file, "r", encoding="utf-8") as f:
+                checkpoint = json.load(f)
+        except json.JSONDecodeError as je:
+            corrupt_path = f"{checkpoint_file}.corrupt.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            try:
+                os.replace(checkpoint_file, corrupt_path)
+                print(f"⚠️  Checkpoint corrupt ({je}); quarantined to {corrupt_path}.", flush=True)
+            except OSError as oe:
+                print(f"⚠️  Checkpoint corrupt ({je}); quarantine failed ({oe}); ignoring file.", flush=True)
+            return set()
+
         if category in checkpoint:
             data = checkpoint[category]
             # Check if checkpoint is from today
@@ -511,13 +546,13 @@ def load_checkpoint(checkpoint_file, category):
             if not last_updated.startswith(datetime.now().strftime("%Y-%m-%d")):
                 print(f"[{category}] Checkpoint is stale (from {last_updated}), starting fresh.")
                 return set()
-                
+
             processed_urls = set(data.get("processed_urls", []))
             print(f"[{category}] Resuming from checkpoint: {len(processed_urls)} URLs already processed")
             return processed_urls
         return set()
     except Exception as e:
-        print(f"Error loading checkpoint: {e}")
+        print(f"Error loading checkpoint: {e}", flush=True)
         return set()
 
 
