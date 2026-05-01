@@ -18,6 +18,13 @@
         <key>Minute</key>
         <integer>0</integer>
     </dict>
+
+    <!-- Run on launchd load (login / boot / launchctl load) so a Mac that was
+         asleep at 03:00 still triggers the day's run when the user wakes it.
+         Same-day re-runs are no-ops because run_daily_scraper.sh exits early
+         when success_${TODAY}.marker already exists. -->
+    <key>RunAtLoad</key>
+    <true/>
     
     <key>StandardOutPath</key>
     <string>/Users/hiroki/Documents/うちなーらいふスクレイピング/logs/scraper.log</string>
