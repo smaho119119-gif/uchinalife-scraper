@@ -1279,13 +1279,15 @@ def main():
                     for sold_url in sold_urls:
                         prop = db.get_property_by_url(sold_url)
                         if prop:
-                            # Capture title/price for the daily report (before
-                            # mark_inactive flips is_active=0)
+                            # Capture title/price/expiry for the daily report
+                            # (before mark_inactive flips is_active=0)
                             report_sold_properties.append({
                                 "url": prop.get("url") or sold_url,
                                 "title": prop.get("title"),
                                 "price": prop.get("price"),
                                 "category": prop.get("category") or cat_name,
+                                "expiry_date": prop.get("expiry_date"),
+                                "last_seen_date": prop.get("last_seen_date"),
                             })
                             if prop.get("images"):
                                 urls_saved = archive_sold_property_images(

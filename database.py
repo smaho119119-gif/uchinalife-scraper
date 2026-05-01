@@ -362,16 +362,20 @@ class Database:
     def get_property_by_url(self, url: str) -> Optional[Dict]:
         """Get a single property by URL.
 
-        Returns title/price/genre_name_ja in addition to the legacy fields so
-        the daily report can show "what sold". Legacy callers (image archiver)
-        only read url/category/images, so adding fields is safe.
+        Returns title/price/genre_name_ja/expiry_date/last_seen_date in
+        addition to the legacy fields so the daily report can (a) show
+        "what disappeared" and (b) classify each disappearance as
+        成約 (expiry still in the future) vs 掲載終了 (expiry already past).
+        Legacy callers (image archiver) only read url/category/images, so
+        adding fields is safe.
         """
         if self.db_type == "sqlite":
             conn = self._get_sqlite_connection()
             cursor = conn.cursor()
             try:
                 cursor.execute(
-                    "SELECT url, category, images, title, price, genre_name_ja "
+                    "SELECT url, category, images, title, price, genre_name_ja, "
+                    "expiry_date, last_seen_date "
                     "FROM properties WHERE url = ?",
                     (url,),
                 )
@@ -390,6 +394,8 @@ class Database:
                         "title": row[3],
                         "price": row[4],
                         "genre_name_ja": row[5],
+                        "expiry_date": row[6],
+                        "last_seen_date": row[7],
                     }
                 return None
             finally:
@@ -397,7 +403,8 @@ class Database:
         else:
             try:
                 result = self.supabase.table("properties")\
-                    .select("url, category, images, title, price, genre_name_ja")\
+                    .select("url, category, images, title, price, "
+                            "genre_name_ja, expiry_date, last_seen_date")\
                     .eq("url", url)\
                     .limit(1)\
                     .execute()
