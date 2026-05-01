@@ -55,6 +55,21 @@
   - エラーパスで context.close() を呼ぶが既に死んでいるので例外を握りつぶす（既存のスタイルに合わせて Exception を捕捉）
   - スレッド固有変数なのでロック不要
 
+## 2026-05-01 — Round 6: phone-friendly mail notifications
+
+### feat(notify): SMTP relay + daily report + failure alert
+- **新規**: `notify_failure.py` — XServer SMTP (sv16131.xserver.jp:465 SSL) で `info@usmc.jp` に送信。同日重複送信を `logs/alert_sent_YYYYMMDD.flag` で抑止 (`--force` で迂回可)。
+- **新規**: `daily_report.py` — 成功時に毎日1通、件名に `[5/2] 🆕694 ❌712 (戸建)` のように当日サマリを乗せる。本文はカテゴリ別 new/sold + 失効物件 Top10 (高額順) + 所要時間 + ステータス。スマホで折り返し表示が崩れない plain text。
+- **拡張**: `database.get_property_by_url` が title/price/genre_name_ja も返すようになった。後方互換 (既存呼び出しは url/category/images だけ読む)。
+- **改修**: `integrated_scraper.main` 末尾で `daily_report.send_daily_report` を呼ぶ。`AUTO_RETRY_COUNT > 0` の子プロセスでは送信をスキップして二重送信回避。例外を吸収して exit_code=0 を保つ (mark_success の妨げにならない)。
+- **改修**: `check_scraper_health.sh` が連続失敗 ≥2日で `notify_failure.py` 経由で警告メール送信。CRITICAL/WARNING の icon 付きで件名にも反映。
+- **設定**: `.env` に `SMTP_*` / `ALERT_TO` を追加。XServer の認証情報は `住まい１１９フランチャイズ募集/.env.local` の値を共有。
+- **テスト**: 配線確認用テストメール 1通 + サンプル daily report 1通 を実送信。XServer SMTP がエラー無く受領。
+- **副作用チェック**:
+  - `get_property_by_url` の戻り値拡張 → 全呼び出し元 (`integrated_scraper.py:1280` の1箇所のみ) を確認。レポート生成側は新フィールドを使い、画像アーカイブ側は既存フィールドだけ参照。
+  - `daily_report` インポートを scraper 内 `try` で囲い、send 失敗時もジョブ exit_code=0 を維持。marker 作成への影響なし。
+  - `.gitignore` に `logs/alert_sent_*.flag` を追加してリポジトリ汚染回避。
+
 ## 2026-04-30 — Round 5: real-world validation
 
 - **4/29 manual run completed**: 5,308 properties scraped (errors 0), CSV

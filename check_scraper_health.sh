@@ -53,9 +53,50 @@ for i in $(seq 0 13); do
 done
 
 if [ $FAIL_COUNT -ge 3 ]; then
+    SEVERITY="CRITICAL"
     echo "CRITICAL: $FAIL_COUNT consecutive days without success! (missed ${TOTAL_MISSED}/14 days in last 2 weeks)"
 elif [ $FAIL_COUNT -ge 1 ]; then
+    SEVERITY="WARNING"
     echo "WARNING: $FAIL_COUNT day(s) without success. (missed ${TOTAL_MISSED}/14 days in last 2 weeks)"
 else
+    SEVERITY="OK"
     echo "OK: No missed days. (missed ${TOTAL_MISSED}/14 days in last 2 weeks)"
+fi
+
+# Send alert mail when streak >= 2 days. notify_failure.py is idempotent per
+# day so re-running the health check the same morning won't spam.
+if [ "$SEVERITY" = "CRITICAL" ] || { [ "$SEVERITY" = "WARNING" ] && [ "$FAIL_COUNT" -ge 2 ]; }; then
+    PROJECT_DIR="/Users/hiroki/Documents/うちなーらいふスクレイピング"
+    PYTHON="/Users/hiroki/miniconda3/bin/python3"
+    if [ "$SEVERITY" = "CRITICAL" ]; then
+        ICON="🚨"
+    else
+        ICON="⚠️"
+    fi
+    SUBJECT="${ICON} うちなーらいふ ${FAIL_COUNT}日連続失敗"
+    LAST_RUN_RAW=$(cat "$HEALTH_FILE" 2>/dev/null || echo "なし")
+    BODY=$(cat <<EOF
+${ICON} うちなーらいふスクレイパー
+連続失敗 ${FAIL_COUNT} 日
+
+━━━━━━━━━━━━━━━━━━━
+連続失敗:    ${FAIL_COUNT} 日
+過去14日:    ${TOTAL_MISSED} 日欠損
+当日(${TODAY}): $([ -f "$MARKER_FILE" ] && echo "✅ 成功" || echo "❌ 未完了")
+直近状態:
+  ${LAST_RUN_RAW}
+━━━━━━━━━━━━━━━━━━━
+
+🛠 復旧コマンド
+  cd ~/Documents/うちなーらいふスクレイピング
+  bash run_daily_scraper.sh
+
+📂 ログ
+  logs/scraper.log
+  logs/health_check.log
+
+このメールは1日1通までに制限されています。
+EOF
+)
+    "$PYTHON" "${PROJECT_DIR}/notify_failure.py" "$SUBJECT" "$BODY" || echo "notify_failure: send command failed"
 fi

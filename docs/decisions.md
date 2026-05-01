@@ -29,6 +29,22 @@
 - **理由**: Round 1 の `run_daily_scraper.sh` の末尾 `pkill -9 -f integrated_scraper.py` が孤児を確実に掃除する。再帰は `AUTO_RETRY_COUNT` で 2 回までに制限。実害は観測されていない。
 - **代替案不採用**: 「shell 経由で再起動」案 → pidfile lock を壊すか、bypass フラグを増やす副作用が出る
 
+## D-010 通知メールはプレーンテキスト + 絵文字、HTML不使用
+
+- **決定**: スマホ通知の本文は plain text に絵文字とフラットな ASCII 罫線で構成する。HTML / multipart / インライン CSS は採用しない。
+- **理由**: iOS Mail / Gmail アプリ / Spark など主要メーラーで HTML レンダリング差異 (フォント・余白・絵文字幅・テーブル崩れ) があり、視認性のコントロールが難しい。plain text は最小公倍数で確実に同じに見える。
+- **件名設計**: 件名で「日付・新着件数・失効件数・最大カテゴリ」を1行に圧縮。プッシュ通知のプレビューだけで状況が分かる。本文を開かなくても済む。
+- **代替案不採用**:
+  - HTML メール: 上記の通り見え方ばらつき
+  - Slack/LINE webhook: 現状ユーザは info@usmc.jp で集約管理しているため、通知系統を分散させない
+  - SendGrid / Resend: 既に XServer SMTP のリレー設定が他プロジェクトで動いているのでそれを再利用
+
+## D-011 失敗アラートと日次レポートを別系統として実装
+
+- **決定**: `notify_failure.py` (低レベル送信) と `daily_report.py` (整形 + 送信ラッパ) を分離。失敗アラートは `check_scraper_health.sh` から、日次レポートは `integrated_scraper.py main 末尾`から。
+- **理由**: 「失敗時のみ送る (連続失敗カウント条件・1日1通制限)」と「成功時に必ず送る (毎日)」は条件が真逆。同じスクリプトに条件を詰め込むと分岐が膨れる。発火点も異なる (cron的 health check vs scraper 本体)。
+- **重複送信防止**: 失敗アラートのみ `logs/alert_sent_YYYYMMDD.flag` で同日抑制。日次レポートは `force=True` で flag 無視 (成功は1日1ジョブだが、子プロセスは AUTO_RETRY_COUNT で抑制)。
+
 ## D-009 「直前の取得」を日付ではなく ORDER BY OFFSET 1 で表現
 
 - **決定**: `daily_link_snapshots` のスキーマは変更せず、`get_previous_snapshot_links` で `ORDER BY snapshot_date DESC, scraped_at DESC LIMIT 1 OFFSET 1` により「自分の最新を除いた最新」を取る。`get_previous_links` は legacy alias として残置（外部診断スクリプト互換）。

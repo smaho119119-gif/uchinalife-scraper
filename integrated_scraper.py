@@ -1239,6 +1239,12 @@ def main():
     total_new = 0
     total_sold = 0
     total_scraped = 0
+    # Track per-category counts and sold property details for the daily report.
+    # We capture sold-property metadata BEFORE mark_inactive runs (the row is
+    # still readable from `properties`) so the report can show what disappeared.
+    report_by_category: Dict[str, Dict[str, int]] = {}
+    report_sold_properties: List[Dict[str, Any]] = []
+    run_started_at = time.time()
     
     # Create a single executor for all categories to reuse threads/browsers
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -1258,23 +1264,36 @@ def main():
                 print(f"\n📊 Diff Detection:", flush=True)
                 print(f"  New properties: {len(new_urls)}", flush=True)
                 print(f"  Sold properties: {len(sold_urls)}", flush=True)
-                
+
                 total_new += len(new_urls)
                 total_sold += len(sold_urls)
-                
+                report_by_category[cat_name] = {
+                    "new": len(new_urls),
+                    "sold": len(sold_urls),
+                }
+
                 # Archive images of sold properties BEFORE marking inactive
                 if sold_urls:
                     print(f"  📸 Archiving images for {len(sold_urls)} sold properties...", flush=True)
                     archived_count = 0
                     for sold_url in sold_urls:
                         prop = db.get_property_by_url(sold_url)
-                        if prop and prop.get("images"):
-                            urls_saved = archive_sold_property_images(
-                                sold_url, prop["images"], cat_name
-                            )
-                            if urls_saved:
-                                db.update_archived_images(sold_url, urls_saved)
-                                archived_count += 1
+                        if prop:
+                            # Capture title/price for the daily report (before
+                            # mark_inactive flips is_active=0)
+                            report_sold_properties.append({
+                                "url": prop.get("url") or sold_url,
+                                "title": prop.get("title"),
+                                "price": prop.get("price"),
+                                "category": prop.get("category") or cat_name,
+                            })
+                            if prop.get("images"):
+                                urls_saved = archive_sold_property_images(
+                                    sold_url, prop["images"], cat_name
+                                )
+                                if urls_saved:
+                                    db.update_archived_images(sold_url, urls_saved)
+                                    archived_count += 1
                     print(f"  ✓ Archived images for {archived_count}/{len(sold_urls)} properties", flush=True)
 
                     marked = db.mark_properties_inactive(sold_urls)
@@ -1384,7 +1403,23 @@ def main():
     
     # Export to CSV
     export_to_csv()
-    
+
+    # Daily phone-friendly report mail. Wrapped in try so a notification
+    # failure cannot break the scrape job's exit code (the marker still gets
+    # created by run_daily_scraper.sh on exit 0).
+    # Skipped on AUTO_RETRY_COUNT > 0 child re-runs so we don't double-report.
+    if int(os.getenv("AUTO_RETRY_COUNT", "0")) == 0:
+        try:
+            from daily_report import send_daily_report
+            send_daily_report(
+                by_category=report_by_category,
+                sold_properties=report_sold_properties,
+                elapsed_seconds=int(time.time() - run_started_at),
+                status="成功",
+            )
+        except Exception as e:
+            print(f"⚠️  Daily report mail failed: {e}", flush=True)
+
     # Auto-diagnosis and auto-fix
     if db.db_type == "supabase":
         auto_diagnose_and_fix(total_scraped)

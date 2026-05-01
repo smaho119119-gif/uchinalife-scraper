@@ -360,28 +360,44 @@ class Database:
     # ================================================================
     
     def get_property_by_url(self, url: str) -> Optional[Dict]:
-        """Get a single property by URL"""
+        """Get a single property by URL.
+
+        Returns title/price/genre_name_ja in addition to the legacy fields so
+        the daily report can show "what sold". Legacy callers (image archiver)
+        only read url/category/images, so adding fields is safe.
+        """
         if self.db_type == "sqlite":
             conn = self._get_sqlite_connection()
             cursor = conn.cursor()
             try:
-                cursor.execute("SELECT url, category, images FROM properties WHERE url = ?", (url,))
+                cursor.execute(
+                    "SELECT url, category, images, title, price, genre_name_ja "
+                    "FROM properties WHERE url = ?",
+                    (url,),
+                )
                 row = cursor.fetchone()
                 if row:
                     images = row[2]
                     if isinstance(images, str):
                         try:
                             images = json.loads(images)
-                        except:
+                        except json.JSONDecodeError:
                             images = []
-                    return {"url": row[0], "category": row[1], "images": images}
+                    return {
+                        "url": row[0],
+                        "category": row[1],
+                        "images": images,
+                        "title": row[3],
+                        "price": row[4],
+                        "genre_name_ja": row[5],
+                    }
                 return None
             finally:
                 conn.close()
         else:
             try:
                 result = self.supabase.table("properties")\
-                    .select("url, category, images")\
+                    .select("url, category, images, title, price, genre_name_ja")\
                     .eq("url", url)\
                     .limit(1)\
                     .execute()

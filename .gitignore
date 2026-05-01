@@ -35,6 +35,7 @@ logs/*.marker
 logs/last_run.json
 logs/run_daily_scraper.pid
 logs/manual_run_*.log
+logs/alert_sent_*.flag
 
 # SQLite leftovers at repo root
 /properties.db
