@@ -6,7 +6,7 @@ SQLiteとSupabaseの両方に対応したデータベース操作
 import os
 import json
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional, Any, Tuple, Union
 from dotenv import load_dotenv
 
@@ -533,6 +533,146 @@ class Database:
                 break
             from_idx += page_size
         return all_data
+
+    # ----- Paginated / filtered queries (dashboard) -------------------------
+    def get_active_count(self) -> int:
+        """Cheap total count of active properties (HEAD request on Supabase)."""
+        if self.db_type == "supabase":
+            res = self.supabase.table("properties").select("id", count="exact", head=True)\
+                .eq("is_active", True).execute()
+            return res.count or 0
+        conn = self._get_sqlite_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM properties WHERE is_active = 1")
+            return cur.fetchone()[0]
+        finally:
+            conn.close()
+
+    def get_properties_paged(self, *, view: str = "all", category: Optional[str] = None,
+                             category_type: Optional[str] = None, q: Optional[str] = None,
+                             date_str: Optional[str] = None, days_back: int = 7,
+                             offset: int = 0, limit: int = 50) -> Dict[str, Any]:
+        """Server-side paged + filtered property query.
+
+        view: "all" | "new" | "sold"
+          - all  : is_active = True
+          - new  : is_active = True AND first_seen_date = date_str (default today)
+          - sold : is_active = False AND last_seen_date >= today - days_back
+        Returns {"data": [...], "total": int}.
+        """
+        if self.db_type == "supabase":
+            return self._get_properties_paged_supabase(
+                view=view, category=category, category_type=category_type, q=q,
+                date_str=date_str, days_back=days_back, offset=offset, limit=limit,
+            )
+        return self._get_properties_paged_sqlite(
+            view=view, category=category, category_type=category_type, q=q,
+            date_str=date_str, days_back=days_back, offset=offset, limit=limit,
+        )
+
+    def _get_properties_paged_supabase(self, *, view, category, category_type, q,
+                                       date_str, days_back, offset, limit) -> Dict[str, Any]:
+        today = date.today().isoformat()
+        target_date = date_str or today
+
+        def base(include_q: bool = True):
+            qb = self.supabase.table("properties").select("*", count="exact")
+            if view == "sold":
+                qb = qb.eq("is_active", False)
+                cutoff = (date.today() - timedelta(days=days_back)).isoformat()
+                qb = qb.gte("last_seen_date", cutoff)
+                qb = qb.order("last_seen_date", desc=True)
+            else:
+                qb = qb.eq("is_active", True)
+                if view == "new":
+                    qb = qb.eq("first_seen_date", target_date)
+                qb = qb.order("first_seen_date", desc=True).order("id", desc=True)
+            if category:
+                qb = qb.eq("category", category)
+            if category_type:
+                qb = qb.eq("category_type", category_type)
+            if q and include_q:
+                # Escape % and _ in user input to avoid wildcard injection.
+                safe = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                qb = qb.ilike("title", f"%{safe}%")
+            return qb
+
+        try:
+            res = base().range(offset, offset + limit - 1).execute()
+            return {"data": res.data or [], "total": res.count or 0}
+        except Exception as e:
+            # Postgres statement_timeout (57014) on ILIKE without a trigram index.
+            # Fall back to client-side filtering across the current page+next pages
+            # so the UI stays usable until the index migration is applied.
+            if q and "57014" in str(e):
+                fallback_rows: List[Dict] = []
+                scan_offset = 0
+                scan_page = 200
+                needle = q.lower()
+                while len(fallback_rows) < offset + limit and scan_offset < 5000:
+                    page_res = base(include_q=False)\
+                        .range(scan_offset, scan_offset + scan_page - 1).execute()
+                    chunk = page_res.data or []
+                    if not chunk:
+                        break
+                    fallback_rows.extend(
+                        r for r in chunk if needle in (r.get("title") or "").lower()
+                    )
+                    scan_offset += scan_page
+                    if len(chunk) < scan_page:
+                        break
+                return {
+                    "data": fallback_rows[offset:offset + limit],
+                    "total": len(fallback_rows),
+                    "approximate": True,
+                }
+            raise
+
+    def _get_properties_paged_sqlite(self, *, view, category, category_type, q,
+                                     date_str, days_back, offset, limit) -> Dict[str, Any]:
+        import sqlite3 as _sq
+        conn = self._get_sqlite_connection()
+        conn.row_factory = _sq.Row
+        cur = conn.cursor()
+        try:
+            where = []
+            params: List[Any] = []
+            if view == "sold":
+                where.append("is_active = 0")
+                cutoff = (date.today() - timedelta(days=days_back)).isoformat()
+                where.append("last_seen_date >= ?")
+                params.append(cutoff)
+                order = "ORDER BY last_seen_date DESC"
+            else:
+                where.append("is_active = 1")
+                if view == "new":
+                    where.append("first_seen_date = ?")
+                    params.append(date_str or date.today().isoformat())
+                order = "ORDER BY first_seen_date DESC, id DESC"
+            if category:
+                where.append("category = ?"); params.append(category)
+            if category_type:
+                where.append("category_type = ?"); params.append(category_type)
+            if q:
+                where.append("title LIKE ?"); params.append(f"%{q}%")
+            where_sql = "WHERE " + " AND ".join(where)
+            cur.execute(f"SELECT COUNT(*) FROM properties {where_sql}", params)
+            total = cur.fetchone()[0]
+            cur.execute(
+                f"SELECT * FROM properties {where_sql} {order} LIMIT ? OFFSET ?",
+                params + [limit, offset],
+            )
+            rows = []
+            for row in cur.fetchall():
+                d = dict(row)
+                d["images"] = json.loads(d["images"]) if d.get("images") else []
+                d["property_data"] = json.loads(d["property_data"]) if d.get("property_data") else {}
+                d["is_active"] = bool(d["is_active"])
+                rows.append(d)
+            return {"data": rows, "total": total}
+        finally:
+            conn.close()
 
     # ================================================================
     # STATISTICS METHODS

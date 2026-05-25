@@ -7,12 +7,36 @@ from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
 from database import db
 from datetime import datetime, date, timedelta
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any, List, Optional
 import os
+import time
+from threading import Lock
 from config import config
 
 app = Flask(__name__, static_folder='.')
 CORS(app)
+
+# Default landing page = dashboard (the old index.html is a legacy local-CSV viewer).
+DEFAULT_PAGE = 'dashboard.html'
+
+# ================================================================
+# Stats cache (TTL) — avoids 70s full-table scans on every reload.
+# ================================================================
+_STATS_TTL_SEC = 600  # 10 minutes
+_stats_cache: Dict[str, Any] = {"data": None, "ts": 0.0}
+_stats_lock = Lock()
+
+def _paging_params() -> Tuple[int, int]:
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(request.args.get('page_size', 50))
+    except (TypeError, ValueError):
+        page_size = 50
+    page_size = max(1, min(page_size, 200))
+    return page, page_size
 
 # ================================================================
 # Static file serving
@@ -20,8 +44,8 @@ CORS(app)
 
 @app.route('/')
 def index():
-    """Serve the main HTML page"""
-    return send_from_directory('.', 'index.html')
+    """Serve the dashboard as landing page."""
+    return send_from_directory('.', DEFAULT_PAGE)
 
 @app.route('/<path:path>')
 def serve_static(path):
@@ -35,78 +59,69 @@ def serve_static(path):
 @app.route('/api/properties/all', methods=['GET'])
 def get_all_properties():
     """
-    Get all active properties
+    Paginated list of active properties.
     Query params:
-      - category: Filter by category (optional)
-      - category_type: Filter by category type 賃貸/売買 (optional)
-      - limit: Limit number of results (optional)
+      - page (default 1), page_size (default 50, max 200)
+      - category, category_type (filters pushed down to DB)
+      - q: title keyword (ILIKE)
     """
     try:
-        # Get all active properties from database
-        properties = db.get_all_active_properties()
-        
-        # Apply filters
-        category = request.args.get('category')
-        category_type = request.args.get('category_type')
-        limit = request.args.get('limit', type=int)
-        
-        if category:
-            properties = [p for p in properties if p['category'] == category]
-        
-        if category_type:
-            properties = [p for p in properties if p['category_type'] == category_type]
-        
-        if limit:
-            properties = properties[:limit]
-        
+        page, page_size = _paging_params()
+        result = db.get_properties_paged(
+            view="all",
+            category=request.args.get('category') or None,
+            category_type=request.args.get('category_type') or None,
+            q=request.args.get('q') or None,
+            offset=(page - 1) * page_size,
+            limit=page_size,
+        )
+        total = result["total"]
         return jsonify({
             'success': True,
-            'count': len(properties),
-            'data': properties
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'total_pages': (total + page_size - 1) // page_size if page_size else 0,
+            'count': len(result["data"]),
+            'data': result["data"],
         })
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/properties/new', methods=['GET'])
 def get_new_properties():
     """
-    Get properties added today (or specific date)
-    Query params:
-      - date: Date in YYYY-MM-DD format (optional, defaults to today)
-      - category: Filter by category (optional)
+    Paginated list of properties first seen on a given date (default today).
     """
     try:
-        target_date = request.args.get('date')
-        if target_date:
-            target_date = datetime.strptime(target_date, '%Y-%m-%d').date()
+        target = request.args.get('date')
+        if target:
+            target_date = datetime.strptime(target, '%Y-%m-%d').date()
         else:
             target_date = date.today()
-        
-        # Query properties by first_seen_date
-        if db.db_type == 'sqlite':
-            properties = _get_new_properties_sqlite(target_date)
-        else:
-            properties = _get_new_properties_supabase(target_date)
-        
-        # Apply category filter
-        category = request.args.get('category')
-        if category:
-            properties = [p for p in properties if p['category'] == category]
-        
+        page, page_size = _paging_params()
+        result = db.get_properties_paged(
+            view="new",
+            category=request.args.get('category') or None,
+            category_type=request.args.get('category_type') or None,
+            q=request.args.get('q') or None,
+            date_str=target_date.isoformat(),
+            offset=(page - 1) * page_size,
+            limit=page_size,
+        )
+        total = result["total"]
         return jsonify({
             'success': True,
             'date': target_date.isoformat(),
-            'count': len(properties),
-            'data': properties
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'total_pages': (total + page_size - 1) // page_size if page_size else 0,
+            'count': len(result["data"]),
+            'data': result["data"],
         })
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def _get_new_properties_sqlite(target_date):
     """SQLite implementation for getting new properties"""
@@ -151,37 +166,34 @@ def _get_new_properties_supabase(target_date):
 @app.route('/api/properties/sold', methods=['GET'])
 def get_sold_properties():
     """
-    Get recently sold/removed properties
-    Query params:
-      - days: Number of days to look back (default: 7)
-      - category: Filter by category (optional)
+    Paginated list of recently sold/removed properties.
+    Query params: page, page_size, days (default 7), category, category_type, q.
     """
     try:
         days_back = request.args.get('days', default=7, type=int)
-        cutoff_date = (date.today() - timedelta(days=days_back)).isoformat()
-        
-        # Query inactive properties
-        if db.db_type == 'sqlite':
-            properties = _get_sold_properties_sqlite(cutoff_date)
-        else:
-            properties = _get_sold_properties_supabase(cutoff_date)
-        
-        # Apply category filter
-        category = request.args.get('category')
-        if category:
-            properties = [p for p in properties if p['category'] == category]
-        
+        page, page_size = _paging_params()
+        result = db.get_properties_paged(
+            view="sold",
+            category=request.args.get('category') or None,
+            category_type=request.args.get('category_type') or None,
+            q=request.args.get('q') or None,
+            days_back=days_back,
+            offset=(page - 1) * page_size,
+            limit=page_size,
+        )
+        total = result["total"]
         return jsonify({
             'success': True,
             'days_back': days_back,
-            'count': len(properties),
-            'data': properties
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'total_pages': (total + page_size - 1) // page_size if page_size else 0,
+            'count': len(result["data"]),
+            'data': result["data"],
         })
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 def _get_sold_properties_sqlite(cutoff_date):
     """SQLite implementation for getting sold properties"""
@@ -225,64 +237,68 @@ def _get_sold_properties_supabase(cutoff_date):
 # Advanced Statistics Endpoint
 # Add this after line 222 in server.py
 
+def _compute_advanced_stats() -> Dict[str, Any]:
+    """Heavy aggregation work (~30-70s on 20K rows). Cached by caller."""
+    time_stats = db.get_time_based_statistics()
+    cat_stats = db.get_category_statistics()
+    price_stats = db.get_price_statistics()
+    area_dist = db.get_area_distribution()
+    total_active = sum(c['count'] for c in cat_stats.values()) or db.get_active_count()
+
+    by_type: Dict[str, int] = {}
+    for cat in cat_stats.values():
+        by_type[cat['category_type']] = by_type.get(cat['category_type'], 0) + cat['count']
+
+    return {
+        'success': True,
+        'total_active': total_active,
+        'new_today': time_stats['new_today'],
+        'new_week': time_stats['new_week'],
+        'new_month': time_stats['new_month'],
+        'sold_today': time_stats['sold_today'],
+        'sold_week': time_stats['sold_week'],
+        'sold_month': time_stats['sold_month'],
+        'price_stats': {
+            'average': f"¥{price_stats['average']}万円",
+            'median': f"¥{price_stats['median']}万円",
+            'min': f"¥{price_stats['min']}万円",
+            'max': f"¥{price_stats['max']}万円",
+            'count': price_stats['count'],
+            'average_raw': price_stats['average'],
+            'median_raw': price_stats['median'],
+            'min_raw': price_stats['min'],
+            'max_raw': price_stats['max'],
+        },
+        'by_category': cat_stats,
+        'by_type': by_type,
+        'by_area': area_dist,
+        'database_type': db.db_type,
+    }
+
 @app.route('/api/stats/advanced', methods=['GET'])
 def get_advanced_stats():
-    """
-    Get comprehensive statistics with price analysis, trends, and area distribution
-    """
+    """Cached advanced stats. Pass ?fresh=1 to bypass the 10-min TTL."""
     try:
-        # Get all active properties count
-        all_props = db.get_all_active_properties()
-        total_active = len(all_props)
-        
-        # Get time-based statistics
-        time_stats = db.get_time_based_statistics()
-        
-        # Get category statistics
-        cat_stats = db.get_category_statistics()
-        
-        # Get price statistics
-        price_stats = db.get_price_statistics()
-        
-        # Get area distribution
-        area_dist = db.get_area_distribution()
-        
-        # Calculate counts by type
-        by_type = {}
-        for cat in cat_stats.values():
-            cat_type = cat['category_type']
-            by_type[cat_type] = by_type.get(cat_type, 0) + cat['count']
-        
-        return jsonify({
-            'success': True,
-            'total_active': total_active,
-            'new_today': time_stats['new_today'],
-            'new_week': time_stats['new_week'],
-            'new_month': time_stats['new_month'],
-            'sold_today': time_stats['sold_today'],
-            'sold_week': time_stats['sold_week'],
-            'sold_month': time_stats['sold_month'],
-            'price_stats': {
-                'average': f"¥{price_stats['average']}万円",
-                'median': f"¥{price_stats['median']}万円",
-                'min': f"¥{price_stats['min']}万円",
-                'max': f"¥{price_stats['max']}万円",
-                'count': price_stats['count'],
-                'average_raw': price_stats['average'],
-                'median_raw': price_stats['median'],
-                'min_raw': price_stats['min'],
-                'max_raw': price_stats['max']
-            },
-            'by_category': cat_stats,
-            'by_type': by_type,
-            'by_area': area_dist,
-            'database_type': db.db_type
-        })
+        force = request.args.get('fresh') in ('1', 'true', 'yes')
+        now = time.time()
+        with _stats_lock:
+            cached = _stats_cache["data"]
+            fresh_enough = cached and (now - _stats_cache["ts"] < _STATS_TTL_SEC)
+        if cached and fresh_enough and not force:
+            payload = dict(cached)
+            payload['cached'] = True
+            payload['cache_age_sec'] = int(now - _stats_cache["ts"])
+            return jsonify(payload)
+
+        data = _compute_advanced_stats()
+        with _stats_lock:
+            _stats_cache["data"] = data
+            _stats_cache["ts"] = time.time()
+        payload = dict(data)
+        payload['cached'] = False
+        return jsonify(payload)
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }),500
+        return jsonify({'success': False, 'error': str(e)}), 500
 @app.route('/api/properties/diff', methods=['GET'])
 def get_daily_diff():
     """

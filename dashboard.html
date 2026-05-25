@@ -343,6 +343,95 @@
             }
         }
 
+        /* Filters */
+        .filters {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .filters select,
+        .filters input[type="search"] {
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            background: white;
+            color: #333;
+        }
+
+        .filters input[type="search"] {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filters select:focus,
+        .filters input[type="search"]:focus {
+            outline: none;
+            border-color: #d32f2f;
+        }
+
+        .filters .reset-btn {
+            padding: 10px 18px;
+            background: #f5f5f5;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: inherit;
+            color: #666;
+            transition: all 0.15s;
+        }
+
+        .filters .reset-btn:hover {
+            background: #eee;
+        }
+
+        /* Pagination */
+        .pager {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            padding: 24px 0;
+            flex-wrap: wrap;
+        }
+
+        .pager button {
+            padding: 8px 14px;
+            border: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+            min-width: 40px;
+        }
+
+        .pager button:hover:not(:disabled) {
+            background: #d32f2f;
+            color: white;
+            border-color: #d32f2f;
+        }
+
+        .pager button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pager .summary {
+            margin: 0 12px;
+            color: #666;
+            font-size: 14px;
+        }
+
         /* Modal */
         .modal {
             display: none;
@@ -572,6 +661,33 @@
             <button class="tab" data-view="sold">成約済み</button>
         </div>
 
+        <!-- Filters -->
+        <div class="filters">
+            <select id="filterCategory">
+                <option value="">全カテゴリ</option>
+                <option value="house">戸建</option>
+                <option value="mansion">マンション</option>
+                <option value="tochi">土地</option>
+                <option value="jukyo">住居</option>
+                <option value="jigyo">事業用</option>
+                <option value="parking">時間貸駐車場</option>
+                <option value="yard">月極駐車場</option>
+                <option value="sonota">その他</option>
+            </select>
+            <select id="filterType">
+                <option value="">売買 / 賃貸</option>
+                <option value="売買">売買</option>
+                <option value="賃貸">賃貸</option>
+            </select>
+            <input type="search" id="filterQuery" placeholder="タイトルで検索…" />
+            <select id="filterPageSize">
+                <option value="50">50件/ページ</option>
+                <option value="100">100件/ページ</option>
+                <option value="200">200件/ページ</option>
+            </select>
+            <button class="reset-btn" id="filterReset">クリア</button>
+        </div>
+
         <!-- Properties Grid -->
         <div id="content">
             <div class="loading">
@@ -579,6 +695,9 @@
                 <p>物件データ読み込み中...</p>
             </div>
         </div>
+
+        <!-- Pagination -->
+        <div class="pager" id="pager"></div>
     </div>
 
     <!-- Modal -->
@@ -596,13 +715,25 @@
         // 現在のページのオリジンを使用（.envで設定したポートに自動対応）
         const API_BASE = window.location.origin;
         let currentView = 'all';
-        let allProperties = [];
+        let currentPage = 1;
+        let totalPages = 1;
+        let totalCount = 0;
         let charts = {};
+        let loadSeq = 0; // discard out-of-order responses
+
+        function currentFilters() {
+            return {
+                category: document.getElementById('filterCategory').value,
+                category_type: document.getElementById('filterType').value,
+                q: document.getElementById('filterQuery').value.trim(),
+                page_size: parseInt(document.getElementById('filterPageSize').value, 10) || 50,
+            };
+        }
 
         async function init() {
+            setupEventListeners();
             await loadAdvancedStats();
             await loadProperties();
-            setupEventListeners();
         }
 
         async function loadAdvancedStats() {
@@ -783,18 +914,37 @@
 
         async function loadProperties() {
             const content = document.getElementById('content');
+            const pager = document.getElementById('pager');
             content.innerHTML = '<div class="loading"><div class="spinner"></div><p>読み込み中...</p></div>';
+            pager.innerHTML = '';
 
+            const filters = currentFilters();
+            const params = new URLSearchParams({
+                page: String(currentPage),
+                page_size: String(filters.page_size),
+            });
+            if (filters.category) params.set('category', filters.category);
+            if (filters.category_type) params.set('category_type', filters.category_type);
+            if (filters.q) params.set('q', filters.q);
+
+            const mySeq = ++loadSeq;
             try {
-                const res = await fetch(`${API_BASE}/api/properties/${currentView}`);
+                const res = await fetch(`${API_BASE}/api/properties/${currentView}?${params}`);
                 const data = await res.json();
+                if (mySeq !== loadSeq) return; // a newer request superseded this one
+                if (!data.success) throw new Error(data.error || 'API error');
 
-                if (data.success) {
-                    allProperties = data.data || [];
-                    displayProperties(allProperties);
+                totalCount = data.total || 0;
+                totalPages = data.total_pages || 1;
+                if (currentPage > totalPages && totalPages > 0) {
+                    currentPage = totalPages;
+                    return loadProperties();
                 }
+                displayProperties(data.data || []);
+                renderPager();
             } catch (e) {
-                content.innerHTML = '<div class="loading">データの読み込みに失敗しました</div>';
+                if (mySeq !== loadSeq) return;
+                content.innerHTML = `<div class="loading">データの読み込みに失敗しました: ${e.message || e}</div>`;
             }
         }
 
@@ -817,6 +967,35 @@
             content.appendChild(grid);
         }
 
+        function renderPager() {
+            const pager = document.getElementById('pager');
+            if (!totalCount) { pager.innerHTML = ''; return; }
+
+            const filters = currentFilters();
+            const from = (currentPage - 1) * filters.page_size + 1;
+            const to = Math.min(currentPage * filters.page_size, totalCount);
+
+            const mkBtn = (label, page, disabled = false) => {
+                const b = document.createElement('button');
+                b.textContent = label;
+                b.disabled = disabled;
+                b.onclick = () => { currentPage = page; loadProperties(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+                return b;
+            };
+
+            pager.innerHTML = '';
+            pager.appendChild(mkBtn('« 最初', 1, currentPage === 1));
+            pager.appendChild(mkBtn('‹ 前へ', Math.max(1, currentPage - 1), currentPage === 1));
+
+            const summary = document.createElement('span');
+            summary.className = 'summary';
+            summary.textContent = `${from.toLocaleString()}–${to.toLocaleString()} / ${totalCount.toLocaleString()}件 (${currentPage}/${totalPages}p)`;
+            pager.appendChild(summary);
+
+            pager.appendChild(mkBtn('次へ ›', Math.min(totalPages, currentPage + 1), currentPage === totalPages));
+            pager.appendChild(mkBtn('最後 »', totalPages, currentPage === totalPages));
+        }
+
         function createPropertyCard(prop) {
             const card = document.createElement('div');
             card.className = 'property-card';
@@ -830,7 +1009,7 @@
                 : null;
 
             const imageHtml = largeImage
-                ? `<img src="${largeImage}" alt="${prop.title}" onerror="this.parentElement.innerHTML='<div class=\\'no-image\\'>🏠</div>'">`
+                ? `<img src="${largeImage}" alt="${prop.title}" loading="lazy" decoding="async" onerror="this.parentElement.innerHTML='<div class=\\'no-image\\'>🏠</div>'">`
                 : '<div class="no-image">🏠</div>';
 
             const badgeHtml = isNew ? '<span class="badge new">NEW</span>' : (isSold ? '<span class="badge sold">成約済</span>' : '');
@@ -935,8 +1114,32 @@
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
                     currentView = tab.dataset.view;
+                    currentPage = 1;
                     loadProperties();
                 });
+            });
+
+            ['filterCategory', 'filterType', 'filterPageSize'].forEach(id => {
+                document.getElementById(id).addEventListener('change', () => {
+                    currentPage = 1;
+                    loadProperties();
+                });
+            });
+
+            const qInput = document.getElementById('filterQuery');
+            let qTimer = null;
+            qInput.addEventListener('input', () => {
+                clearTimeout(qTimer);
+                qTimer = setTimeout(() => { currentPage = 1; loadProperties(); }, 300);
+            });
+
+            document.getElementById('filterReset').addEventListener('click', () => {
+                document.getElementById('filterCategory').value = '';
+                document.getElementById('filterType').value = '';
+                document.getElementById('filterQuery').value = '';
+                document.getElementById('filterPageSize').value = '50';
+                currentPage = 1;
+                loadProperties();
             });
 
             document.getElementById('propertyModal').addEventListener('click', function (e) {
