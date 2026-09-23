@@ -86,3 +86,4 @@ backups/
 
 # YoYo AI version control directory
 .yoyo/
+result_*.json

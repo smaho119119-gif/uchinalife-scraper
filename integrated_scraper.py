@@ -34,6 +34,12 @@ MAX_BROWSER_USES: int = config.MAX_BROWSER_USES
 CATEGORY_NAMES: Dict[str, str] = config.CATEGORY_NAMES
 GENRE_NAMES: Dict[str, str] = config.GENRE_NAMES
 
+# Per-category link-collection result. A category is "complete" only when
+# collection ran to the last page; otherwise the URLs we did not reach would
+# be misread as sold (2026-09-24: jukyo stopped at 2,100/3,787 by the 600s cap).
+COLLECTION_STATS: Dict[str, Dict[str, Any]] = {}
+COLLECTION_COMPLETE_RATIO = 0.97
+
 # --- Setup ---
 if not os.path.exists(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
@@ -587,14 +593,17 @@ def collect_links(category_name, base_url, browser: Browser):
     page_num = 1
     consecutive_empty_pages = 0
     start_time = time.time()
-    MAX_COLLECTION_TIME = 600
+    MAX_COLLECTION_TIME = int(os.getenv("SCRAPER_COLLECTION_TIMEOUT", "600"))
     max_pages = None  # Will be detected from pagination
+    expected_total = None
+    stopped_early = False
     
     try:
         while True:
             elapsed_time = time.time() - start_time
             if elapsed_time > MAX_COLLECTION_TIME:
                 print(f"[{category_name}] ⚠️  Collection timeout ({MAX_COLLECTION_TIME}s). Stopping.")
+                stopped_early = True
                 break
             
             rate_limit_wait()
@@ -646,6 +655,7 @@ def collect_links(category_name, base_url, browser: Browser):
                             if match:
                                 total_items = int(match.group(1))
                                 if total_items > 10:  # Sanity check
+                                    expected_total = total_items
                                     max_pages = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
                                     print(f"[{category_name}] ✓ Detected {total_items} items from XPath, max pages: {max_pages}")
                                     break
@@ -667,6 +677,7 @@ def collect_links(category_name, base_url, browser: Browser):
                             if match:
                                 total_items = int(match.group(1))
                                 if total_items > 10:
+                                    expected_total = total_items
                                     max_pages = (total_items + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
                                     print(f"[{category_name}] ✓ Detected {total_items} items from text, max pages: {max_pages}")
                                     break
@@ -762,18 +773,32 @@ def collect_links(category_name, base_url, browser: Browser):
                 
             except PlaywrightTimeoutError:
                 print(f"[{category_name}] Timeout on page {page_num}. Stopping.")
+                stopped_early = True
                 break
                 
     except Exception as e:
         print(f"[{category_name}] Error: {e}")
+        stopped_early = True
     finally:
         try:
             context.close()
         except:
             pass
         
-    print(f"[{category_name}] ✓ Collection complete: {len(links)} unique links in {elapsed_time:.1f}s")
-    return list(set(links))
+    unique_links = list(set(links))
+    complete = not stopped_early and (
+        expected_total is None or len(unique_links) >= expected_total * COLLECTION_COMPLETE_RATIO
+    )
+    COLLECTION_STATS[category_name] = {
+        "expected": expected_total,
+        "collected": len(unique_links),
+        "complete": complete,
+        "seconds": round(time.time() - start_time, 1),
+    }
+    print(f"[{category_name}] ✓ Collection complete: {len(unique_links)} unique links in {elapsed_time:.1f}s")
+    if not complete:
+        print(f"[{category_name}] ⚠️  INCOMPLETE: {len(unique_links)}/{expected_total} links — sold detection will be skipped")
+    return unique_links
 
 # --- Phase 2: Scrape Details ---
 def scrape_detail(url, category):
@@ -1032,7 +1057,7 @@ def export_to_csv():
     except Exception as e:
         print(f"Error exporting to CSV: {e}")
 
-def detect_diff(category: str, current_urls: list) -> tuple:
+def detect_diff(category: str, current_urls: list, compare_latest: bool = False) -> tuple:
     """Detect new and sold properties.
 
     Compares the URL set we just collected against the snapshot taken on the
@@ -1043,7 +1068,9 @@ def detect_diff(category: str, current_urls: list) -> tuple:
     inside the 2h timeout window).
     """
     current_set = set(current_urls)
-    previous_urls = db.get_previous_snapshot_links(category)
+    # compare_latest: today's snapshot was not saved, so the newest row IS the
+    # previous run (OFFSET 0) rather than the one before it (OFFSET 1).
+    previous_urls = db.get_previous_snapshot_links(category, offset=0 if compare_latest else 1)
     previous_set = set(previous_urls)
 
     new_urls = list(current_set - previous_set)
@@ -1130,6 +1157,16 @@ def auto_diagnose_and_fix(total_scraped: int, max_retries: int = 2):
                 # 全件スクレイピングは5-6時間かかるため絶対に避ける
                 "--skip-refresh",  # リンクは再収集しない（既存リンクを使用）
             ]
+            # カテゴリ指定とメール抑止は引き継ぐ（並列ジョブが全カテゴリを回さないように）。
+            # --report-json は引き継がない（最初の実行の集計を上書きしないため）。
+            argv = sys.argv[1:]
+            for i, a in enumerate(argv):
+                if a == "--categories" and i + 1 < len(argv):
+                    command += ["--categories", argv[i + 1]]
+                elif a.startswith("--categories="):
+                    command.append(a)
+                elif a == "--no-mail":
+                    command.append(a)
             
             print(f"\n🔄 再スクレイピングを開始します（差分のみ）...")
             print(f"   コマンド: {' '.join(command)}")
@@ -1175,7 +1212,21 @@ def main():
                        help="更新チェックをスキップして既存リンクを使用")
     parser.add_argument("--no-diff", action="store_true",
                        help="差分検出をスキップして全物件をスクレイピング")
+    parser.add_argument("--categories", default="",
+                       help="対象カテゴリをカンマ区切りで指定（例: jukyo,house）。省略時は全カテゴリ")
+    parser.add_argument("--report-json", default="",
+                       help="カテゴリ別の結果をJSONで書き出す（GitHub Actionsの集計用）")
+    parser.add_argument("--collect-only", action="store_true",
+                       help="リンク収集だけ行いDBには書かない（試運転用）")
+    parser.add_argument("--no-mail", action="store_true",
+                       help="日次レポートメールを送らない（集計ジョブが送る場合）")
     args = parser.parse_args()
+
+    selected = [c.strip() for c in args.categories.split(",") if c.strip()]
+    unknown = [c for c in selected if c not in CATEGORIES]
+    if unknown:
+        parser.error(f"unknown categories: {unknown}")
+    cats: Dict[str, str] = {c: CATEGORIES[c] for c in selected} if selected else dict(CATEGORIES)
     
     print(f"\n{'='*70}")
     print(f"うちなーらいふ不動産スクレイピングツール - Database版")
@@ -1205,7 +1256,7 @@ def main():
             
             if needs_refresh:
                 print("Collecting fresh links for all categories...\n")
-                for cat_name, cat_url in CATEGORIES.items():
+                for cat_name, cat_url in cats.items():
                     links = collect_links(cat_name, cat_url, browser)
                     all_links[cat_name] = links
                     # Save incrementally with metadata (backup)
@@ -1215,17 +1266,17 @@ def main():
                 all_links = load_links_with_metadata(LINKS_FILE)
                 
                 # Verify all categories exist
-                missing_categories = [cat_name for cat_name in CATEGORIES.keys() 
+                missing_categories = [cat_name for cat_name in cats.keys() 
                                     if cat_name not in all_links or not all_links[cat_name]]
                 
                 if missing_categories:
                     for cat_name in missing_categories:
                         print(f"[{cat_name}] Missing links, collecting...")
-                        links = collect_links(cat_name, CATEGORIES[cat_name], browser)
+                        links = collect_links(cat_name, cats[cat_name], browser)
                         all_links[cat_name] = links
                         save_links_with_metadata(LINKS_FILE, all_links)
                 else:
-                    for cat_name in CATEGORIES.keys():
+                    for cat_name in cats.keys():
                         print(f"[{cat_name}] Loaded {len(all_links[cat_name])} links")
 
         finally:
@@ -1234,6 +1285,15 @@ def main():
     print(f"\n{'='*70}")
     print("Link Collection Complete")
     print(f"{'='*70}\n")
+
+    if args.collect_only:
+        if args.report_json:
+            with open(args.report_json, "w", encoding="utf-8") as f:
+                json.dump({"categories": list(cats.keys()), "collect_only": True,
+                           "collection": {c: COLLECTION_STATS.get(c) for c in cats}},
+                          f, ensure_ascii=False)
+        print(json.dumps(COLLECTION_STATS, ensure_ascii=False), flush=True)
+        return
 
     # 3. Process each category with database integration
     total_new = 0
@@ -1248,19 +1308,29 @@ def main():
     
     # Create a single executor for all categories to reuse threads/browsers
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        for cat_name, links in all_links.items():
+        for cat_name, links in [(c, all_links[c]) for c in cats if c in all_links]:
             print(f"\n{'='*70}", flush=True)
             print(f"Processing Category: {cat_name} ({GENRE_NAMES[cat_name]})", flush=True)
             print(f"{'='*70}", flush=True)
             print(f"Total URLs: {len(links)}", flush=True)
             
-            # Save today's link snapshot to database
-            db.save_link_snapshot(cat_name, links)
-            print(f"✓ Saved link snapshot to database", flush=True)
+            # Links loaded from file (no fresh collection) keep the old behaviour.
+            collection_complete = COLLECTION_STATS.get(cat_name, {}).get("complete", True)
+
+            # Save today's link snapshot to database — only when complete, so a
+            # truncated list never becomes the baseline for the next diff.
+            if collection_complete:
+                db.save_link_snapshot(cat_name, links)
+                print(f"✓ Saved link snapshot to database", flush=True)
+            else:
+                print(f"⚠️  Link collection incomplete — snapshot NOT saved", flush=True)
             
             # Detect diff (new and sold properties)
             if not args.no_diff:
-                new_urls, sold_urls = detect_diff(cat_name, links)
+                new_urls, sold_urls = detect_diff(cat_name, links, compare_latest=not collection_complete)
+                if not collection_complete:
+                    print(f"  ⚠️  Skipping sold detection ({len(sold_urls)} candidates) — collection incomplete", flush=True)
+                    sold_urls = []
                 print(f"\n📊 Diff Detection:", flush=True)
                 print(f"  New properties: {len(new_urls)}", flush=True)
                 print(f"  Sold properties: {len(sold_urls)}", flush=True)
@@ -1271,6 +1341,8 @@ def main():
                     "new": len(new_urls),
                     "sold": len(sold_urls),
                 }
+                if not collection_complete:
+                    report_by_category[cat_name]["incomplete"] = 1
 
                 # Archive images of sold properties BEFORE marking inactive
                 if sold_urls:
@@ -1403,6 +1475,18 @@ def main():
     print(f"Database: {db.db_type.upper()}", flush=True)
     print(f"{'='*70}\n", flush=True)
     
+    if args.report_json:
+        with open(args.report_json, "w", encoding="utf-8") as f:
+            json.dump({
+                "categories": list(cats.keys()),
+                "by_category": report_by_category,
+                "sold_properties": report_sold_properties,
+                "collection": {c: COLLECTION_STATS.get(c) for c in cats},
+                "total_scraped": total_scraped,
+                "elapsed_seconds": int(time.time() - run_started_at),
+            }, f, ensure_ascii=False, default=str)
+        print(f"Report JSON written: {args.report_json}", flush=True)
+
     # Export to CSV
     export_to_csv()
 
@@ -1410,7 +1494,7 @@ def main():
     # failure cannot break the scrape job's exit code (the marker still gets
     # created by run_daily_scraper.sh on exit 0).
     # Skipped on AUTO_RETRY_COUNT > 0 child re-runs so we don't double-report.
-    if int(os.getenv("AUTO_RETRY_COUNT", "0")) == 0:
+    if int(os.getenv("AUTO_RETRY_COUNT", "0")) == 0 and not args.no_mail:
         try:
             from daily_report import send_daily_report
             send_daily_report(

@@ -1,0 +1,135 @@
+name: Daily Property Scraper (parallel)
+
+# 8カテゴリを8台で同時に収集し、最後に1通だけメールを送る。
+# report ジョブは if: always() なので、どのジョブが失敗しても必ずメールが出る。
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full = 本番（DBに書く） / collect-only = リンク収集だけ（DBに書かない試運転）"
+        type: choice
+        options: [full, collect-only]
+        default: full
+  # 試運転: このブランチへの push では collect-only で動かす（本番DBに触れない）
+  push:
+    branches: [actions-parallel]
+    paths:
+      - ".github/workflows/scrape-parallel.yml"
+      - "integrated_scraper.py"
+
+concurrency:
+  group: scraper
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # keepalive（60日無動作での自動停止を防ぐ）
+
+env:
+  MODE: ${{ github.event_name == 'push' && 'collect-only' || inputs.mode || 'full' }}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        category: [jukyo, jigyo, yard, parking, tochi, mansion, house, sonota]
+    env:
+      DATABASE_TYPE: supabase
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      STORAGE_SUPABASE_URL: ${{ secrets.STORAGE_SUPABASE_URL }}
+      STORAGE_SUPABASE_KEY: ${{ secrets.STORAGE_SUPABASE_KEY }}
+      SCRAPER_MAX_WORKERS: 2
+      SCRAPER_MAX_RPS: 2
+      SCRAPER_COLLECTION_TIMEOUT: 3600
+      TZ: Asia/Tokyo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.47.0-${{ runner.os }}
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Scrape ${{ matrix.category }}
+        run: |
+          mkdir -p logs output
+          EXTRA=""
+          if [ "$MODE" = "collect-only" ]; then EXTRA="--collect-only"; fi
+          python -u integrated_scraper.py --force-refresh --no-mail \
+            --categories "${{ matrix.category }}" \
+            --report-json "result_${{ matrix.category }}.json" $EXTRA 2>&1 | tee "logs/${{ matrix.category }}.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.category }}
+          path: |
+            result_${{ matrix.category }}.json
+            logs/${{ matrix.category }}.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  report:
+    needs: scrape
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      SMTP_FROM_NAME: ${{ secrets.SMTP_FROM_NAME }}
+      ALERT_TO: ${{ secrets.ALERT_TO }}
+      TZ: Asia/Tokyo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          path: results
+
+      - name: Summary
+        run: |
+          python - <<'PY'
+          import glob, json
+          for p in sorted(glob.glob("results/**/result_*.json", recursive=True)):
+              d = json.load(open(p, encoding="utf-8"))
+              for c, s in (d.get("collection") or {}).items():
+                  print(c, s, d.get("by_category", {}).get(c))
+          PY
+
+      - name: Send mail (always)
+        if: env.MODE == 'full'
+        run: |
+          mkdir -p logs
+          python actions_report.py results
+
+      - name: Keepalive (prevent 60-day auto-disable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/scrape-parallel.yml/enable" || true

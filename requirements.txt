@@ -1,7 +1,11 @@
-playwright==1.40.0
-python-dotenv==1.0.0
+# ローカル venv（2026-09-24 復旧時）と同じ版に固定。numpy 2 系は pandas 2.1.4 と非互換
+numpy<2
 pandas==2.1.4
-fake-useragent==1.4.0
-psycopg2-binary==2.9.9
-supabase==2.10.0
-httpx==0.27.0
+playwright==1.47.0
+supabase==2.24.0
+fake-useragent==2.2.0
+requests==2.32.5
+pillow==12.0.0
+python-dotenv==1.2.1
+openpyxl==3.1.2
+psycopg2-binary==2.9.13

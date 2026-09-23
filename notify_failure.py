@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import smtplib
 import ssl
+import time
 import sys
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -84,13 +85,18 @@ def send(subject: str, body: str, *, force: bool = False) -> int:
     msg.set_content(body)
 
     context = ssl.create_default_context()
-    try:
-        with smtplib.SMTP_SSL(host, port, context=context, timeout=30) as smtp:
-            smtp.login(user, password)
-            smtp.send_message(msg)
-    except Exception as e:
-        print(f"smtp send failed: {e}", file=sys.stderr)
-        return 3
+    # 一時的なSMTP障害で知らせが消えないよう、間を空けて3回まで試す
+    for attempt in range(1, 4):
+        try:
+            with smtplib.SMTP_SSL(host, port, context=context, timeout=30) as smtp:
+                smtp.login(user, password)
+                smtp.send_message(msg)
+            break
+        except Exception as e:
+            print(f"smtp send failed (attempt {attempt}/3): {e}", file=sys.stderr)
+            if attempt == 3:
+                return 3
+            time.sleep(30 * attempt)
 
     # Only mark as sent on success
     try:

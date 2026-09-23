@@ -291,7 +291,7 @@ class Database:
             print(f"Error saving link snapshot to Supabase: {e}")
             return False
     
-    def get_previous_snapshot_links(self, category: str) -> List[str]:
+    def get_previous_snapshot_links(self, category: str, offset: int = 1) -> List[str]:
         """Return URLs from the snapshot immediately preceding the current one.
 
         Selection is driven by sort order (date DESC, scraped_at DESC) with
@@ -306,9 +306,9 @@ class Database:
         which the caller treats as "everything is new".
         """
         if self.db_type == "sqlite":
-            return self._get_previous_snapshot_links_sqlite(category)
+            return self._get_previous_snapshot_links_sqlite(category, offset)
         else:
-            return self._get_previous_snapshot_links_supabase(category)
+            return self._get_previous_snapshot_links_supabase(category, offset)
 
     # Legacy alias — keep callers compiling while we migrate.
     def get_previous_links(self, category: str, days_back: int = 1) -> List[str]:
@@ -316,7 +316,7 @@ class Database:
         and was historically misleading (B-NEW3)."""
         return self.get_previous_snapshot_links(category)
 
-    def _get_previous_snapshot_links_sqlite(self, category: str) -> List[str]:
+    def _get_previous_snapshot_links_sqlite(self, category: str, offset: int = 1) -> List[str]:
         """SQLite: pick the row with the second-most-recent (date, scraped_at)."""
         conn = self._get_sqlite_connection()
         cursor = conn.cursor()
@@ -325,8 +325,8 @@ class Database:
                 SELECT urls, snapshot_date FROM daily_link_snapshots
                 WHERE category = ?
                 ORDER BY snapshot_date DESC, scraped_at DESC
-                LIMIT 1 OFFSET 1
-            """, (category,))
+                LIMIT 1 OFFSET ?
+            """, (category, offset))
 
             result = cursor.fetchone()
             if result:
@@ -338,14 +338,14 @@ class Database:
         finally:
             conn.close()
 
-    def _get_previous_snapshot_links_supabase(self, category: str) -> List[str]:
+    def _get_previous_snapshot_links_supabase(self, category: str, offset: int = 1) -> List[str]:
         """Supabase: same logic via .range(1, 1)."""
         result = self.supabase.table("daily_link_snapshots")\
             .select("urls, snapshot_date")\
             .eq("category", category)\
             .order("snapshot_date", desc=True)\
             .order("scraped_at", desc=True)\
-            .range(1, 1)\
+            .range(offset, offset)\
             .execute()
 
         if result.data:
