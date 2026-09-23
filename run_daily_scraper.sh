@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Absolute paths (launchd does not inherit user PATH)
-PYTHON="/Users/hiroki/miniconda3/bin/python3"
+PROJECT_VENV_PY="/Users/hiroki/Documents/うちなーらいふスクレイピング/venv/bin/python"
+# 専用venv（共有minicondaのnumpy更新でpandasが壊れた 2026-09-16 対策）
+PYTHON="$PROJECT_VENV_PY"
 GTIMEOUT="/opt/homebrew/bin/gtimeout"
 PROJECT_DIR="/Users/hiroki/Documents/うちなーらいふスクレイピング"
 LOGS_DIR="${PROJECT_DIR}/logs"

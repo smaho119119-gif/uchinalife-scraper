@@ -67,7 +67,7 @@ fi
 # day so re-running the health check the same morning won't spam.
 if [ "$SEVERITY" = "CRITICAL" ] || { [ "$SEVERITY" = "WARNING" ] && [ "$FAIL_COUNT" -ge 2 ]; }; then
     PROJECT_DIR="/Users/hiroki/Documents/うちなーらいふスクレイピング"
-    PYTHON="/Users/hiroki/miniconda3/bin/python3"
+    PYTHON="${PROJECT_DIR}/venv/bin/python"
     if [ "$SEVERITY" = "CRITICAL" ]; then
         ICON="🚨"
     else
