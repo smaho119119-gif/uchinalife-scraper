@@ -487,6 +487,40 @@ class Database:
                 continue
         return total_marked
     
+    def reactivate_properties(self, urls: List[str]) -> int:
+        """Set is_active back to True for URLs that are listed on the site again.
+
+        Repairs rows that an incomplete link collection wrongly marked as sold
+        (2026-09-24: jukyo cut off at 2,100/3,787). Call only with a COMPLETE
+        link list for the category.
+        """
+        if not urls:
+            return 0
+        today = date.today().isoformat()
+        if self.db_type == "sqlite":
+            conn = self._get_sqlite_connection()
+            try:
+                cur = conn.cursor()
+                placeholders = ','.join('?' * len(urls))
+                cur.execute(f"UPDATE properties SET is_active = 1, last_seen_date = ? "
+                            f"WHERE is_active = 0 AND url IN ({placeholders})", [today, *urls])
+                conn.commit()
+                return cur.rowcount
+            finally:
+                conn.close()
+        total = 0
+        for i in range(0, len(urls), 100):
+            try:
+                result = self.supabase.table("properties")\
+                    .update({"is_active": True, "last_seen_date": today})\
+                    .eq("is_active", False)\
+                    .in_("url", urls[i:i + 100])\
+                    .execute()
+                total += len(result.data) if result.data else 0
+            except Exception as e:
+                print(f"Error reactivating properties (batch {i//100 + 1}): {e}")
+        return total
+
     # ================================================================
     # QUERY METHODS
     # ================================================================

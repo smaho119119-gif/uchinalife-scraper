@@ -134,12 +134,9 @@ def _cleanup_all_browsers():
             except:
                 pass
         _all_thread_browsers.clear()
-    # Force kill any leftover Chromium
-    try:
-        import subprocess
-        subprocess.run(["pkill", "-f", "chromium.*--headless"], capture_output=True, timeout=5)
-    except:
-        pass
+    # 以前はここで pkill -f "chromium.*--headless" を実行していたが、Mac上の
+    # 他のスクレイパー（同時実行中の本番を含む）のブラウザまで殺していた
+    # （2026-09-24 に本番の土地417件が全滅）。自分が起動したものだけ上で閉じる。
 
 atexit.register(_cleanup_all_browsers)
 
@@ -1322,6 +1319,9 @@ def main():
             if collection_complete:
                 db.save_link_snapshot(cat_name, links)
                 print(f"✓ Saved link snapshot to database", flush=True)
+                reactivated = db.reactivate_properties(links)
+                if reactivated:
+                    print(f"♻️  Reactivated {reactivated} listed properties that were marked sold", flush=True)
             else:
                 print(f"⚠️  Link collection incomplete — snapshot NOT saved", flush=True)
             
