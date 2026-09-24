@@ -1375,6 +1375,11 @@ def main():
                 
                 # Only scrape NEW properties
                 urls_to_scrape = new_urls
+                if urls_to_scrape:
+                    already = db.existing_urls(urls_to_scrape)
+                    if already:
+                        urls_to_scrape = [u for u in urls_to_scrape if u not in already]
+                        print(f"  Skipping {len(already)} already in database (same-day re-run / catch-up)", flush=True)
             else:
                 print(f"\n⚠️  Diff detection skipped - will scrape all {len(links)} URLs", flush=True)
                 urls_to_scrape = links

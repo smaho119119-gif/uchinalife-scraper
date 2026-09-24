@@ -415,6 +415,37 @@ class Database:
                 print(f"Error getting property by url: {e}")
                 return None
 
+    def existing_urls(self, urls: List[str]) -> set:
+        """Return the subset of `urls` that already have a row in properties.
+
+        Used to skip re-scraping listings we already hold (same-day re-runs and
+        catch-up after an outage compare against an old snapshot and would
+        otherwise re-fetch thousands of pages). On error returns an empty set,
+        i.e. falls back to scraping everything — slower but never loses data.
+        """
+        if not urls:
+            return set()
+        found: set = set()
+        if self.db_type == "sqlite":
+            conn = self._get_sqlite_connection()
+            try:
+                cur = conn.cursor()
+                for i in range(0, len(urls), 500):
+                    batch = urls[i:i + 500]
+                    cur.execute(f"SELECT url FROM properties WHERE url IN ({','.join('?' * len(batch))})", batch)
+                    found.update(r[0] for r in cur.fetchall())
+                return found
+            finally:
+                conn.close()
+        try:
+            for i in range(0, len(urls), 100):
+                result = self.supabase.table("properties").select("url").in_("url", urls[i:i + 100]).execute()
+                found.update(r["url"] for r in (result.data or []))
+            return found
+        except Exception as e:
+            print(f"Error checking existing urls (will scrape all): {e}")
+            return set()
+
     def update_archived_images(self, url: str, archived_urls: List[str]) -> bool:
         """Save archived image URLs to the property record"""
         archived_json = json.dumps(archived_urls)
