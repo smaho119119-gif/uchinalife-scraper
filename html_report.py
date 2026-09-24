@@ -285,7 +285,7 @@ def build_html(*, results: dict[str, dict], jobs: list[dict], status: str, run_u
             + _section("新着の内訳", ORANGE, bars)
             + (_section("カレンダー（直近5週）", TEAL, cal) if hist else "")
             + (_section("掲載数の推移", "#1d4ed8", trend) if counts else "")
-            + _section("実行の詳細（GitHub 10台）", "#6d28d9", run_head + runs)
+            + _section("実行の詳細（GitHub）", "#6d28d9", run_head + runs)
             + f'<tr><td style="padding:18px 20px 24px;font-size:13px;color:{MUTED}">'
               f'<a href="{_e(run_url)}" style="color:{TEAL};font-weight:800">実行ログを開く（GitHub）</a></td></tr>')
 

@@ -1,9 +1,8 @@
 name: Daily Property Scraper (parallel)
 
-# 10台で同時に収集し、最後に1通だけメールを送る。
-#   - 住居以外の7カテゴリ: 1台ずつ（収集→差分→新着取得）
-#   - 住居: リンク収集をページ範囲で3台に分担 → 1台で合体して差分→新着取得
-#     （住居は約80ページ・1ページ約17秒と遅く、1台だと全体の足を引っ張るため）
+# 8カテゴリを8台で同時に収集し、最後に1通だけメールを送る。
+# リンク収集はサイトの検索API（--api）: 市町村・地区の区画ごとに「サイトが言う件数どおり受け取れたか」を照合する。
+# 一覧ページをブラウザでめくる旧方式は、空ページ・時間切れ・ずれで黙って取りこぼしていた（2026-09-25 実測で戸建398件）。
 # report ジョブは if: always() なので、どのジョブが失敗しても必ずメールが出る。
 on:
   # 毎日 03:17 JST（UTC 18:17）。毎時0分は世界中の起動が集中して遅れる・飛ばされるので避ける
@@ -44,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        category: [jigyo, yard, parking, tochi, mansion, house, sonota]
+        category: [jukyo, jigyo, yard, parking, tochi, mansion, house, sonota]
     env:
       DATABASE_TYPE: supabase
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -80,7 +79,7 @@ jobs:
           mkdir -p logs output
           EXTRA=""
           if [ "$MODE" = "collect-only" ]; then EXTRA="--collect-only"; fi
-          python -u integrated_scraper.py --force-refresh --no-mail \
+          python -u integrated_scraper.py --api --no-mail \
             --categories "${{ matrix.category }}" \
             --report-json "result_${{ matrix.category }}.json" $EXTRA 2>&1 | tee "logs/${{ matrix.category }}.log"
           exit "${PIPESTATUS[0]}"
@@ -96,131 +95,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # 住居のリンク収集を3台で分担（DBには書かない）。3台目は終わりを決めず最後のページまで
-  jukyo-collect:
-    if: ${{ inputs.mode != 'mail-test' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        pages: ["1-27", "28-54", "55-"]
-    env:
-      DATABASE_TYPE: supabase
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      STORAGE_SUPABASE_URL: ${{ secrets.STORAGE_SUPABASE_URL }}
-      STORAGE_SUPABASE_KEY: ${{ secrets.STORAGE_SUPABASE_KEY }}
-      SCRAPER_MAX_WORKERS: 2
-      SCRAPER_MAX_RPS: 2
-      SCRAPER_COLLECTION_TIMEOUT: 3600
-      TZ: Asia/Tokyo
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-1.47.0-${{ runner.os }}
-
-      - name: Install Chromium
-        run: python -m playwright install --with-deps chromium
-
-      - name: Collect jukyo pages ${{ matrix.pages }}
-        run: |
-          mkdir -p logs output
-          SHARD="$(echo '${{ matrix.pages }}' | tr -c '0-9\n' '_')"
-          echo "SHARD=$SHARD" >> "$GITHUB_ENV"
-          python -u integrated_scraper.py --collect-only --no-mail --categories jukyo \
-            --pages "${{ matrix.pages }}" --report-json "shard_${SHARD}.json" 2>&1 | tee "logs/jukyo_${SHARD}.log"
-          exit "${PIPESTATUS[0]}"
-
-      - name: Upload shard
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jukyo-shard-${{ env.SHARD }}
-          path: |
-            shard_*.json
-            logs/*.log
-          if-no-files-found: ignore
-          retention-days: 3
-
-  # 3台分のリンクを合体して、差分→売却判定→新着取得。1台でも欠けたら売却判定はしない
-  jukyo:
-    needs: jukyo-collect
-    if: ${{ always() && inputs.mode != 'mail-test' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 150
-    env:
-      DATABASE_TYPE: supabase
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      STORAGE_SUPABASE_URL: ${{ secrets.STORAGE_SUPABASE_URL }}
-      STORAGE_SUPABASE_KEY: ${{ secrets.STORAGE_SUPABASE_KEY }}
-      SCRAPER_MAX_WORKERS: 2
-      SCRAPER_MAX_RPS: 2
-      SCRAPER_COLLECTION_TIMEOUT: 3600
-      TZ: Asia/Tokyo
-      SCRAPER_EXPECTED_SHARDS: 3
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-1.47.0-${{ runner.os }}
-
-      - name: Install Chromium
-        run: python -m playwright install --with-deps chromium
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: jukyo-shard-*
-          path: shards
-
-      - name: Process jukyo
-        run: |
-          mkdir -p logs output
-          EXTRA=""
-          if [ "$MODE" = "collect-only" ]; then EXTRA="--collect-only"; fi
-          FILES="$(find shards -name 'shard_*.json' | sort | paste -sd, -)"
-          echo "shards: $FILES"
-          python -u integrated_scraper.py --no-mail --categories jukyo --links-json "$FILES" \
-            --report-json result_jukyo.json $EXTRA 2>&1 | tee logs/jukyo.log
-          exit "${PIPESTATUS[0]}"
-
-      - name: Upload result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: result-jukyo
-          path: |
-            result_jukyo.json
-            logs/jukyo.log
-          if-no-files-found: ignore
-          retention-days: 14
-
   report:
-    needs: [scrape, jukyo]
+    needs: scrape
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 10

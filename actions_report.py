@@ -76,7 +76,7 @@ def build_details(results: dict[str, dict], names: dict[str, str], jobs: list[di
     def t(s):
         return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(JST) if s else None
 
-    lines = ["━━━━━━━━━━━━━━━━━━━", "【実行の詳細（GitHub 10台）】", ""]
+    lines = ["━━━━━━━━━━━━━━━━━━━", "【実行の詳細（GitHub）】", ""]
     jobs = [j for j in (jobs if jobs is not None else _jobs()) if j.get("name") != "report"]
     if jobs:
         starts = [t(j["started_at"]) for j in jobs if j.get("started_at")]
