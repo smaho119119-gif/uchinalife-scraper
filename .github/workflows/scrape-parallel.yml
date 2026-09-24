@@ -6,9 +6,9 @@ name: Daily Property Scraper (parallel)
 #     （住居は約80ページ・1ページ約17秒と遅く、1台だと全体の足を引っ張るため）
 # report ジョブは if: always() なので、どのジョブが失敗しても必ずメールが出る。
 on:
-  # 毎日 03:00 JST（UTC 18:00）。混雑時は GitHub 側で数十分遅れることがある
+  # 毎日 03:17 JST（UTC 18:17）。毎時0分は世界中の起動が集中して遅れる・飛ばされるので避ける
   schedule:
-    - cron: "0 18 * * *"
+    - cron: "17 18 * * *"
   workflow_dispatch:
     inputs:
       mode:
