@@ -238,17 +238,31 @@ def build_html(*, results: dict[str, dict], jobs: list[dict], status: str, run_u
             return (e - s).total_seconds() / 60
         except Exception:
             return 0.0
+    def jlabel(name: str) -> str:
+        """GitHub job name → short Japanese label that fits one line on a phone."""
+        import re
+        short = {c: CATEGORY_META.get(c, ("", c))[1].split(" ")[-1] for c in ORDER}
+        m = re.match(r"scrape \((\w+)\)", name)
+        if m:
+            return short.get(m.group(1), m.group(1))
+        m = re.match(r"jukyo-collect \((\d+)-(\d*)\)", name)
+        if m:
+            return f"{short['jukyo']} {m.group(1)}〜{m.group(2) or '最後'}p"
+        if name == "jukyo":
+            return f"{short['jukyo']} まとめ"
+        return name
+
     run_jobs = [j for j in jobs if j.get("name") != "report"]
     max_min = max((jmin(j) for j in run_jobs), default=0)
     runs = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
     for j in sorted(run_jobs, key=lambda j: -jmin(j)):
         good = j.get("conclusion") == "success"
-        w = 0 if max_min <= 0 else max(2, round(110 * jmin(j) / max_min))
-        runs += (f'<tr><td style="padding:3px 8px 3px 0;font-size:13px;font-weight:700;color:{INK if good else PINK};width:150px">'
+        pct = 0 if max_min <= 0 else max(2, round(78 * jmin(j) / max_min))  # 画面幅に合わせて伸びる
+        runs += (f'<tr><td style="padding:3px 10px 3px 0;font-size:13px;font-weight:700;color:{INK if good else PINK};white-space:nowrap;width:1%">'
                  f'{"✅" if good else "❌"} {_e(j.get("name", ""))}</td>'
-                 f'<td style="padding:3px 0"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
-                 f'<td style="width:{w}px;height:12px;background:{TEAL if good else PINK};border-radius:3px;font-size:0">&nbsp;</td>'
-                 f'<td style="padding-left:6px;font-size:13px;font-weight:800">{jmin(j):.1f}分</td></tr></table></td></tr>')
+                 f'<td style="padding:3px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+                 f'<td width="{pct}%" style="height:12px;background:{TEAL if good else PINK};border-radius:3px;font-size:0">&nbsp;</td>'
+                 f'<td style="padding-left:6px;font-size:13px;font-weight:800;white-space:nowrap">{jmin(j):.1f}分</td></tr></table></td></tr>')
     runs += "</table>"
     retries = sum(r["retries"] for r in rows)
     run_head = (f'<div style="font-size:14px;font-weight:800;color:{INK};padding-bottom:8px">'
