@@ -594,6 +594,8 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
     max_pages = None  # Will be detected from pagination
     expected_total = None
     stopped_early = False
+    PAGE_RETRIES = 3   # 読み込み失敗・空ページは同じページを3回まで取り直す
+    page_retry = 0
     
     try:
         while True:
@@ -627,9 +629,17 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
             print(f"[{category_name}] Visiting: {url}")
             
             try:
-                page.goto(url, wait_until='domcontentloaded', timeout=15000)
+                page.goto(url, wait_until='domcontentloaded', timeout=30000)
             except Exception as e:
-                print(f"[{category_name}] Failed to load page {page_num}: {e}")
+                page_retry += 1
+                if page_retry < PAGE_RETRIES:
+                    print(f"[{category_name}] Failed to load page {page_num} (try {page_retry}/{PAGE_RETRIES}), retrying: {e}")
+                    time.sleep(5 * page_retry)
+                    continue
+                # 取り直しても駄目: ページを飛ばすと中の物件が「売れた」扱いになるので不完全にする
+                print(f"[{category_name}] ⚠️  Gave up page {page_num} after {PAGE_RETRIES} tries: {e}")
+                stopped_early = True
+                page_retry = 0
                 consecutive_empty_pages += 1
                 if consecutive_empty_pages >= 3:
                     break
@@ -742,6 +752,22 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
                     except PlaywrightTimeoutError:
                         continue
                 
+                if not page_links and max_pages and page_num <= max_pages:
+                    # 件数上はまだ物件があるはずのページが空: 一時的な不調とみて取り直す
+                    page_retry += 1
+                    if page_retry < PAGE_RETRIES:
+                        print(f"[{category_name}] Empty page {page_num} within {max_pages} pages (try {page_retry}/{PAGE_RETRIES}), retrying")
+                        time.sleep(5 * page_retry)
+                        continue
+                    print(f"[{category_name}] ⚠️  Page {page_num} stayed empty after {PAGE_RETRIES} tries")
+                    stopped_early = True
+                    page_retry = 0
+                    consecutive_empty_pages += 1
+                    if consecutive_empty_pages >= 3:
+                        break
+                    page_num += 1
+                    continue
+
                 if not page_links:
                     print(f"[{category_name}] No links found on page {page_num}. URL: {page.url}")
                     consecutive_empty_pages += 1
@@ -760,6 +786,7 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
                     continue
                 
                 consecutive_empty_pages = 0
+                page_retry = 0
                 links.extend(page_links)
                 print(f"[{category_name}] Page {page_num}: Collected {len(page_links)} links. Total: {len(links)}")
                 
