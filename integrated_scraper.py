@@ -1403,12 +1403,18 @@ def main():
             
             # Links loaded from file (no fresh collection) keep the old behaviour.
             collection_complete = COLLECTION_STATS.get(cat_name, {}).get("complete", True)
+            # 売れた判定の一時停止（2026-09-25〜 404確認つきの新判定ができるまで）。
+            # 比較用の記録も保存しないので、止めている間に消えた物件は後日の比較で拾える。
+            skip_sold = os.getenv("SCRAPER_SKIP_SOLD") == "1"
 
             # Save today's link snapshot to database — only when complete, so a
             # truncated list never becomes the baseline for the next diff.
             if collection_complete:
-                db.save_link_snapshot(cat_name, links)
-                print(f"✓ Saved link snapshot to database", flush=True)
+                if skip_sold:
+                    print(f"⏸  Sold detection paused — snapshot NOT saved", flush=True)
+                else:
+                    db.save_link_snapshot(cat_name, links)
+                    print(f"✓ Saved link snapshot to database", flush=True)
                 reactivated = db.reactivate_properties(links)
                 if reactivated:
                     print(f"♻️  Reactivated {reactivated} listed properties that were marked sold", flush=True)
@@ -1417,9 +1423,12 @@ def main():
             
             # Detect diff (new and sold properties)
             if not args.no_diff:
-                new_urls, sold_urls = detect_diff(cat_name, links, compare_latest=not collection_complete)
+                new_urls, sold_urls = detect_diff(cat_name, links, compare_latest=not collection_complete or skip_sold)
                 if not collection_complete:
                     print(f"  ⚠️  Skipping sold detection ({len(sold_urls)} candidates) — collection incomplete", flush=True)
+                    sold_urls = []
+                elif skip_sold:
+                    print(f"  ⏸  Sold detection paused ({len(sold_urls)} candidates not marked)", flush=True)
                     sold_urls = []
                 print(f"\n📊 Diff Detection:", flush=True)
                 print(f"  New properties: {len(new_urls)}", flush=True)

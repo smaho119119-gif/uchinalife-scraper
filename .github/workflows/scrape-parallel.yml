@@ -32,6 +32,8 @@ permissions:
   actions: write   # keepalive（60日無動作での自動停止を防ぐ）
 
 env:
+  # 売れた判定の一時停止。404確認つきの新しい判定ができたら外す
+  SCRAPER_SKIP_SOLD: "1"
   MODE: ${{ github.event_name == 'push' && 'collect-only' || inputs.mode || 'full' }}
 
 jobs:

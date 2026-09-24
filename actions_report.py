@@ -67,6 +67,8 @@ def main(results_dir: str) -> int:
         problems.append("失敗: " + "・".join(names.get(c, c) for c in failed))
     if incomplete:
         problems.append("収集途中で打切り(成約判定なし): " + "・".join(names.get(c, c) for c in incomplete))
+    if os.getenv("SCRAPER_SKIP_SOLD") == "1":
+        problems.append("売れた判定は一時停止中（新しい判定を準備中。新着の取り込みは通常どおり）")
     status = "成功" if not problems else " / ".join(problems) + f"\nログ: {RUN_URL}"
 
     return send_daily_report(
