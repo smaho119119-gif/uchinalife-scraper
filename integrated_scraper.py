@@ -582,12 +582,12 @@ def load_checkpoint(checkpoint_file, category):
 
 
 # --- Phase 1: Collect Links ---
-def collect_links(category_name, base_url, browser: Browser):
+def collect_links(category_name, base_url, browser: Browser, start_page: int = 1, end_page: Optional[int] = None):
     print(f"[{category_name}] Starting link collection...")
     context = create_browser_context(browser)
     page = context.new_page()
     links = []
-    page_num = 1
+    page_num = start_page
     consecutive_empty_pages = 0
     start_time = time.time()
     MAX_COLLECTION_TIME = int(os.getenv("SCRAPER_COLLECTION_TIMEOUT", "600"))
@@ -606,6 +606,10 @@ def collect_links(category_name, base_url, browser: Browser):
             rate_limit_wait()
             
             # Check against detected max pages
+            if end_page and page_num > end_page:
+                print(f"[{category_name}] Reached shard end page ({end_page}). Stopping.")
+                break
+
             if max_pages and page_num > max_pages:
                 print(f"[{category_name}] Reached detected maximum page ({max_pages}). Stopping.")
                 break
@@ -633,7 +637,7 @@ def collect_links(category_name, base_url, browser: Browser):
                 continue
             
             # Detect maximum pages from pagination (first page only)
-            if page_num == 1 and not max_pages:
+            if page_num == start_page and not max_pages:
                 try:
                     import re
                     
@@ -783,8 +787,12 @@ def collect_links(category_name, base_url, browser: Browser):
             pass
         
     unique_links = list(set(links))
+    # A page-range shard only covers part of the total; the ratio is checked
+    # after merging (merge_shard_links), so here it only has to finish its range.
+    partial_range = start_page > 1 or end_page is not None
     complete = not stopped_early and (
-        expected_total is None or len(unique_links) >= expected_total * COLLECTION_COMPLETE_RATIO
+        partial_range or expected_total is None
+        or len(unique_links) >= expected_total * COLLECTION_COMPLETE_RATIO
     )
     COLLECTION_STATS[category_name] = {
         "expected": expected_total,
@@ -1054,6 +1062,47 @@ def export_to_csv():
     except Exception as e:
         print(f"Error exporting to CSV: {e}")
 
+def merge_shard_links(files: List[str], cats: Dict[str, str]) -> Dict[str, List[str]]:
+    """Merge page-range shards (--pages) into one link list per category.
+
+    Complete only when every shard finished normally AND the union reaches
+    COLLECTION_COMPLETE_RATIO of the site's total; a missing or cut-off shard
+    therefore disables sold detection instead of mass-marking listings sold.
+    """
+    merged: Dict[str, set] = {c: set() for c in cats}
+    shards_ok: Dict[str, bool] = {c: True for c in cats}
+    expected: Dict[str, Optional[int]] = {c: None for c in cats}
+    seen: Dict[str, int] = {c: 0 for c in cats}
+    for path in files:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"⚠️  Could not read shard {path}: {e}", flush=True)
+            continue
+        for c in cats:
+            if c not in data.get("links", {}):
+                continue
+            seen[c] += 1
+            merged[c].update(data["links"][c])
+            stat = (data.get("collection") or {}).get(c) or {}
+            shards_ok[c] = shards_ok[c] and bool(stat.get("complete"))
+            if stat.get("expected"):
+                expected[c] = max(expected[c] or 0, stat["expected"])
+    expected_shards = int(os.getenv("SCRAPER_EXPECTED_SHARDS", "0"))
+    result: Dict[str, List[str]] = {}
+    for c in cats:
+        links = sorted(merged[c])
+        enough_shards = seen[c] > 0 and (not expected_shards or seen[c] >= expected_shards)
+        complete = enough_shards and shards_ok[c] and (
+            expected[c] is None or len(links) >= expected[c] * COLLECTION_COMPLETE_RATIO
+        )
+        COLLECTION_STATS[c] = {"expected": expected[c], "collected": len(links),
+                               "complete": complete, "shards": seen[c]}
+        print(f"[{c}] Merged {seen[c]} shards: {len(links)}/{expected[c]} links, complete={complete}", flush=True)
+        result[c] = links
+    return result
+
 def detect_diff(category: str, current_urls: list, compare_latest: bool = False) -> tuple:
     """Detect new and sold properties.
 
@@ -1215,6 +1264,10 @@ def main():
                        help="カテゴリ別の結果をJSONで書き出す（GitHub Actionsの集計用）")
     parser.add_argument("--collect-only", action="store_true",
                        help="リンク収集だけ行いDBには書かない（試運転用）")
+    parser.add_argument("--pages", default="",
+                       help="リンク収集するページ範囲（例: 1-27、55-）。--collect-only と併用して分担収集する")
+    parser.add_argument("--links-json", default="",
+                       help="分担収集した結果JSON（カンマ区切り）を合わせて使い、リンク収集を省く")
     parser.add_argument("--no-mail", action="store_true",
                        help="日次レポートメールを送らない（集計ジョブが送る場合）")
     args = parser.parse_args()
@@ -1251,7 +1304,14 @@ def main():
             # 2. Load or Collect Links
             all_links = {}
             
-            if needs_refresh:
+            if args.links_json:
+                all_links = merge_shard_links([f for f in args.links_json.split(",") if f], cats)
+            elif args.pages:
+                start_s, _, end_s = args.pages.partition("-")
+                start_page, end_page = int(start_s), (int(end_s) if end_s else None)
+                for cat_name, cat_url in cats.items():
+                    all_links[cat_name] = collect_links(cat_name, cat_url, browser, start_page, end_page)
+            elif needs_refresh:
                 print("Collecting fresh links for all categories...\n")
                 for cat_name, cat_url in cats.items():
                     links = collect_links(cat_name, cat_url, browser)
@@ -1286,9 +1346,12 @@ def main():
     if args.collect_only:
         if args.report_json:
             with open(args.report_json, "w", encoding="utf-8") as f:
-                json.dump({"categories": list(cats.keys()), "collect_only": True,
-                           "collection": {c: COLLECTION_STATS.get(c) for c in cats}},
-                          f, ensure_ascii=False)
+                out = {"categories": list(cats.keys()), "collect_only": True,
+                       "collection": {c: COLLECTION_STATS.get(c) for c in cats}}
+                if args.pages:  # shard output is merged later by --links-json
+                    out["pages"] = args.pages
+                    out["links"] = {c: all_links.get(c, []) for c in cats}
+                json.dump(out, f, ensure_ascii=False)
         print(json.dumps(COLLECTION_STATS, ensure_ascii=False), flush=True)
         return
 
