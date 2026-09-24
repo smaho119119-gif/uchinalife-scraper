@@ -235,6 +235,10 @@ jobs:
       # XServer は海外IP（Actions）を 554 で拒否するので、東京の中継から送る
       MAIL_RELAY_URL: ${{ secrets.MAIL_RELAY_URL }}
       MAIL_RELAY_TOKEN: ${{ secrets.MAIL_RELAY_TOKEN }}
+      # HTMLレポートの推移・カレンダー用（読み取りのみ）
+      DATABASE_TYPE: supabase
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       TZ: Asia/Tokyo
     steps:
       - uses: actions/checkout@v4
@@ -242,6 +246,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - uses: actions/download-artifact@v4
         with:

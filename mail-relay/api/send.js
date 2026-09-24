@@ -15,9 +15,12 @@ module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   if (!tokenOk(req.headers.authorization)) return res.status(401).json({ error: "unauthorized" });
 
-  const { subject, body } = req.body || {};
+  const { subject, body, html } = req.body || {};
   if (typeof subject !== "string" || typeof body !== "string" || !subject || subject.length > 300 || body.length > 200000) {
     return res.status(400).json({ error: "subject/body required" });
+  }
+  if (html !== undefined && (typeof html !== "string" || html.length > 500000)) {
+    return res.status(400).json({ error: "html must be a string under 500KB" });
   }
 
   const port = Number(process.env.SMTP_PORT || 465);
@@ -34,6 +37,7 @@ module.exports = async (req, res) => {
       to: process.env.ALERT_TO,
       subject,
       text: body,
+      ...(html ? { html } : {}),
     });
     return res.status(200).json({ ok: true, messageId: info.messageId, region: process.env.VERCEL_REGION || null });
   } catch (e) {

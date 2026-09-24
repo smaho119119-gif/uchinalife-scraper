@@ -52,7 +52,7 @@ def _read_body(spec: str) -> str:
     return spec  # treat as inline body
 
 
-def _send_via_relay(url: str, subject: str, body: str, flag: str) -> int:
+def _send_via_relay(url: str, subject: str, body: str, flag: str, html: str | None = None) -> int:
     """Send through the Tokyo relay (mail-relay/, Vercel hnd1).
 
     XServer SMTP rejects GitHub Actions' overseas IPs with 554 5.7.1, so the
@@ -62,7 +62,10 @@ def _send_via_relay(url: str, subject: str, body: str, flag: str) -> int:
     import urllib.request
 
     token = os.environ.get("MAIL_RELAY_TOKEN", "")
-    data = json.dumps({"subject": subject, "body": body}).encode("utf-8")
+    payload = {"subject": subject, "body": body}
+    if html:
+        payload["html"] = html
+    data = json.dumps(payload).encode("utf-8")
     for attempt in range(1, 4):
         req = urllib.request.Request(url, data=data, method="POST", headers={
             "Content-Type": "application/json",
@@ -89,7 +92,7 @@ def _send_via_relay(url: str, subject: str, body: str, flag: str) -> int:
     return 3
 
 
-def send(subject: str, body: str, *, force: bool = False) -> int:
+def send(subject: str, body: str, *, force: bool = False, html: str | None = None) -> int:
     _load_env()
     os.makedirs(LOGS_DIR, exist_ok=True)
 
@@ -100,7 +103,7 @@ def send(subject: str, body: str, *, force: bool = False) -> int:
 
     relay_url = os.environ.get("MAIL_RELAY_URL")
     if relay_url:
-        return _send_via_relay(relay_url, subject, body, flag)
+        return _send_via_relay(relay_url, subject, body, flag, html)
 
     host = os.environ.get("SMTP_HOST")
     port = int(os.environ.get("SMTP_PORT", "465"))
@@ -124,6 +127,8 @@ def send(subject: str, body: str, *, force: bool = False) -> int:
     msg["To"] = to
     msg["Date"] = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
 
     context = ssl.create_default_context()
     # 一時的なSMTP障害で知らせが消えないよう、間を空けて3回まで試す

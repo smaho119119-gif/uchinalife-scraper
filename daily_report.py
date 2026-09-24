@@ -208,10 +208,6 @@ def build_body(
                 if url:
                     lines.append(f"   {url}")
 
-    lines.append("")
-    lines.append(HR)
-    lines.append("詳細ログ:")
-    lines.append("~/Documents/うちなーらいふスクレイピング/logs/")
     return "\n".join(lines)
 
 
@@ -222,6 +218,7 @@ def send_daily_report(
     elapsed_seconds: int,
     status: str = "成功",
     appendix: str = "",
+    html: str | None = None,
 ) -> int:
     """Build & send. Idempotency is intentionally NOT applied here — failure
     mail uses the per-day flag, but successful daily reports should be sent
@@ -275,7 +272,7 @@ def send_daily_report(
         body = body + "\n\n" + appendix
     # force=True so a successful daily report isn't silenced by an earlier
     # failure-alert flag on the same day
-    return send(subject, body, force=True)
+    return send(subject, body, force=True, html=html)
 
 
 if __name__ == "__main__":

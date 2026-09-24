@@ -48,7 +48,27 @@ def _jobs() -> list[dict]:
         return []
 
 
-def build_details(results: dict[str, dict], names: dict[str, str]) -> str:
+def _total_minutes(jobs: list[dict]) -> int | None:
+    from datetime import datetime
+    spans = [(j.get("started_at"), j.get("completed_at")) for j in jobs if j.get("name") != "report"]
+    spans = [(s, e) for s, e in spans if s and e]
+    if not spans:
+        return None
+    p = lambda x: datetime.fromisoformat(x.replace("Z", "+00:00"))
+    return int((max(p(e) for _, e in spans) - min(p(s) for s, _ in spans)).total_seconds() // 60)
+
+
+def _html(results: dict[str, dict], jobs: list[dict], status: str, total_minutes: int | None) -> str | None:
+    """HTML dashboard; None (text-only mail) if building it fails for any reason."""
+    try:
+        from html_report import build_html
+        return build_html(results=results, jobs=jobs, status=status, run_url=RUN_URL, total_minutes=total_minutes)
+    except Exception as e:
+        print(f"html report failed, sending text only: {e}", file=sys.stderr)
+        return None
+
+
+def build_details(results: dict[str, dict], names: dict[str, str], jobs: list[dict] | None = None) -> str:
     """Per-machine timings and per-category collection numbers for the mail."""
     from datetime import datetime, timedelta, timezone
     JST = timezone(timedelta(hours=9))
@@ -57,7 +77,7 @@ def build_details(results: dict[str, dict], names: dict[str, str]) -> str:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(JST) if s else None
 
     lines = ["━━━━━━━━━━━━━━━━━━━", "【実行の詳細（GitHub 10台）】", ""]
-    jobs = [j for j in _jobs() if j.get("name") != "report"]
+    jobs = [j for j in (jobs if jobs is not None else _jobs()) if j.get("name") != "report"]
     if jobs:
         starts = [t(j["started_at"]) for j in jobs if j.get("started_at")]
         ends = [t(j["completed_at"]) for j in jobs if j.get("completed_at")]
@@ -132,6 +152,10 @@ def main(results_dir: str) -> int:
             by_category[cat] = d["by_category"][cat]
         sold.extend(d.get("sold_properties", []))  # one category per result file
     elapsed = max(d.get("elapsed_seconds", 0) for d in results.values())
+    jobs = _jobs()
+    total_minutes = _total_minutes(jobs)
+    if total_minutes is not None:
+        elapsed = total_minutes * 60  # 全体の時間（最初の台の開始〜最後の台の終了）
 
     problems = []
     if failed:
@@ -147,7 +171,8 @@ def main(results_dir: str) -> int:
         sold_properties=sold,
         elapsed_seconds=elapsed,
         status=status,
-        appendix=build_details(results, names),
+        appendix=build_details(results, names, jobs),
+        html=_html(results, jobs, status, total_minutes),
     )
 
 
