@@ -3,6 +3,9 @@ name: Daily Property Scraper (parallel)
 # 8カテゴリを8台で同時に収集し、最後に1通だけメールを送る。
 # report ジョブは if: always() なので、どのジョブが失敗しても必ずメールが出る。
 on:
+  # 毎日 03:00 JST（UTC 18:00）。混雑時は GitHub 側で数十分遅れることがある
+  schedule:
+    - cron: "0 18 * * *"
   workflow_dispatch:
     inputs:
       mode:
