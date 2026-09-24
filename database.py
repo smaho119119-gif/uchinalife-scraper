@@ -415,6 +415,26 @@ class Database:
                 print(f"Error getting property by url: {e}")
                 return None
 
+    def active_urls(self, category: str) -> List[str]:
+        """Every URL the database currently holds as listed (is_active) for a category."""
+        if self.db_type == "sqlite":
+            conn = self._get_sqlite_connection()
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT url FROM properties WHERE category = ? AND is_active = 1", (category,))
+                return [r[0] for r in cur.fetchall()]
+            finally:
+                conn.close()
+        out: List[str] = []
+        start = 0
+        while True:
+            rows = self.supabase.table("properties").select("url").eq("category", category)\
+                .eq("is_active", True).order("url").range(start, start + 999).execute().data or []
+            out += [r["url"] for r in rows]
+            if len(rows) < 1000:
+                return out
+            start += 1000
+
     def existing_urls(self, urls: List[str]) -> set:
         """Return the subset of `urls` that already have a row in properties.
 

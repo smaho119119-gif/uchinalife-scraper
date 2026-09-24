@@ -15,6 +15,11 @@ on:
         type: choice
         options: [full, collect-only, mail-test]
         default: full
+      sold_mode:
+        description: "売れた判定: normal = 詳細ページで確認して確定 / dry-run = 確認だけ（書かない） / cleanup = 候補が多くても止めない（溜まった分の一掃） / skip = 判定しない"
+        type: choice
+        options: [normal, dry-run, cleanup, skip]
+        default: normal
   # 試運転: このブランチへの push では collect-only で動かす（本番DBに触れない）
   push:
     branches: [actions-parallel]
@@ -31,8 +36,11 @@ permissions:
   actions: write   # keepalive（60日無動作での自動停止を防ぐ）
 
 env:
-  # 売れた判定の一時停止。404確認つきの新しい判定ができたら外す
-  SCRAPER_SKIP_SOLD: "1"
+  # 売れた判定のモード（定期実行は SOLD_MODE_DEFAULT）
+  SOLD_MODE: ${{ inputs.sold_mode || 'skip' }}
+  SCRAPER_SKIP_SOLD: ${{ (inputs.sold_mode || 'skip') == 'skip' && '1' || '' }}
+  SCRAPER_SOLD_DRY_RUN: ${{ inputs.sold_mode == 'dry-run' && '1' || '' }}
+  SCRAPER_ALLOW_MASS_SOLD: ${{ (inputs.sold_mode == 'cleanup' || inputs.sold_mode == 'dry-run') && '1' || '' }}
   MODE: ${{ github.event_name == 'push' && 'collect-only' || inputs.mode || 'full' }}
 
 jobs:

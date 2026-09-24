@@ -168,6 +168,18 @@ def main(results_dir: str) -> int:
         problems.append("検索窓口の異常でブラウザ方式に切替: " + "・".join(names.get(c, c) for c in fallback))
     if incomplete:
         problems.append("収集途中で打切り(成約判定なし): " + "・".join(names.get(c, c) for c in incomplete))
+    def cats_with(key):
+        return [(c, (d.get("by_category") or {}).get(c, {}).get(key)) for c, d in results.items()
+                if (d.get("by_category") or {}).get(c, {}).get(key)]
+    held = cats_with("sold_held_mass")
+    if held:
+        problems.append("売れた候補が多すぎるため保留: " + "・".join(f"{names.get(c, c)}{n}件" for c, n in held))
+    bad_controls = [c for c, d in results.items() if (d.get("by_category") or {}).get(c, {}).get("sold_controls_ok") is False]
+    if bad_controls:
+        problems.append("判定の物差しが合わず売れた判定を保留: " + "・".join(names.get(c, c) for c in bad_controls))
+    if os.getenv("SCRAPER_SOLD_DRY_RUN") == "1":
+        would = sum(n for _, n in cats_with("sold_confirmed"))
+        problems.append(f"売れた判定は試運転（確認のみ・書き込みなし）: 確定相当 {would}件")
     if os.getenv("SCRAPER_SKIP_SOLD") == "1":
         problems.append("売れた判定は一時停止中（新しい判定を準備中。新着の取り込みは通常どおり）")
     status = "成功" if not problems else " / ".join(problems) + f"\nログ: {RUN_URL}"

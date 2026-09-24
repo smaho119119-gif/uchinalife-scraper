@@ -116,7 +116,9 @@ def build_html(*, results: dict[str, dict], jobs: list[dict], status: str, run_u
             "cat": cat, "ok": bool(d), "complete": bool(col.get("complete")),
             "listed": col.get("collected") or 0, "site": col.get("expected"),
             "new": bc.get("new", 0), "sold": bc.get("sold", 0),
-            "paused": bc.get("sold_candidates_paused"), "retries": col.get("retries") or 0,
+            "paused": bc.get("sold_candidates_paused",
+                             bc.get("sold_confirmed") if bc.get("sold_dry_run") else bc.get("sold_held_mass")),
+            "retries": col.get("retries") or 0,
         })
     # previous listing count = latest snapshot before today
     prev_date = max((d for d in counts if d < today.isoformat()), default=None)

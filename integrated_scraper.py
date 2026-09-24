@@ -1463,58 +1463,79 @@ def main():
             
             # Links loaded from file (no fresh collection) keep the old behaviour.
             collection_complete = COLLECTION_STATS.get(cat_name, {}).get("complete", True)
-            # 売れた判定の一時停止（2026-09-25〜 404確認つきの新判定ができるまで）。
-            # 比較用の記録も保存しないので、止めている間に消えた物件は後日の比較で拾える。
+            # 売れた判定の切り替え:
+            #   SCRAPER_SKIP_SOLD=1     … 判定しない（候補数だけ数える）
+            #   SCRAPER_SOLD_DRY_RUN=1  … 詳細ページで確認まで行うが、DBには書かない
+            #   SCRAPER_ALLOW_MASS_SOLD=1 … 候補が多すぎる時の停止を外す（溜まった分の初回一掃用）
             skip_sold = os.getenv("SCRAPER_SKIP_SOLD") == "1"
+            dry_run = os.getenv("SCRAPER_SOLD_DRY_RUN") == "1"
+            allow_mass = os.getenv("SCRAPER_ALLOW_MASS_SOLD") == "1"
+            MASS_RATIO = 0.15
 
-            # Save today's link snapshot to database — only when complete, so a
-            # truncated list never becomes the baseline for the next diff.
-            if collection_complete:
-                if skip_sold:
-                    print(f"⏸  Sold detection paused — snapshot NOT saved", flush=True)
-                else:
-                    db.save_link_snapshot(cat_name, links)
-                    print(f"✓ Saved link snapshot to database", flush=True)
+            if collection_complete and dry_run:
+                print(f"🧪 Dry run — snapshot and reactivation not written", flush=True)
+            elif collection_complete:
+                db.save_link_snapshot(cat_name, links)
+                print(f"✓ Saved link snapshot to database", flush=True)
                 reactivated = db.reactivate_properties(links)
                 if reactivated:
                     print(f"♻️  Reactivated {reactivated} listed properties that were marked sold", flush=True)
             else:
                 print(f"⚠️  Link collection incomplete — snapshot NOT saved", flush=True)
-            
-            # Detect diff (new and sold properties)
+
             if not args.no_diff:
-                new_urls, sold_urls = detect_diff(cat_name, links, compare_latest=not collection_complete or skip_sold)
+                # 新着 = 今日の一覧のうち、DBにまだ無い物件（前回の記録と比べない。取り逃しも翌日拾える）
+                known = db.existing_urls(links)
+                new_urls = [u for u in links if u not in known]
+
+                # 売れた候補 = DBで掲載中なのに、今日の「完全な」一覧に無い物件
+                stats: Dict[str, Any] = {"new": len(new_urls), "sold": 0}
+                sold_urls: List[str] = []
                 if not collection_complete:
-                    print(f"  ⚠️  Skipping sold detection ({len(sold_urls)} candidates) — collection incomplete", flush=True)
-                    sold_urls = []
-                elif skip_sold:
-                    print(f"  ⏸  Sold detection paused ({len(sold_urls)} candidates not marked)", flush=True)
-                    paused_candidates = len(sold_urls)
-                    sold_urls = []
+                    print(f"  ⚠️  Collection incomplete — sold detection skipped", flush=True)
+                    stats["incomplete"] = 1
+                else:
+                    listed = set(links)
+                    candidates = [u for u in db.active_urls(cat_name) if u not in listed]
+                    stats["sold_candidates"] = len(candidates)
+                    print(f"  Sold candidates (active in DB, missing from today's list): {len(candidates)}", flush=True)
+                    if skip_sold:
+                        stats["sold_candidates_paused"] = len(candidates)
+                        print(f"  ⏸  Sold detection paused", flush=True)
+                    elif candidates and len(candidates) > max(20, len(links) * MASS_RATIO) and not allow_mass:
+                        stats["sold_held_mass"] = len(candidates)
+                        print(f"  🛑 {len(candidates)} candidates exceed {int(MASS_RATIO*100)}% of {len(links)} — held, not marked", flush=True)
+                    elif candidates:
+                        from sold_confirm import confirm
+                        res = confirm(cat_name, candidates, links[0] if links else None)
+                        stats.update({"sold_confirmed": len(res["confirmed"]), "sold_still_listed": len(res["still_listed"]),
+                                      "sold_held": len(res["held"]), "sold_controls_ok": res["controls_ok"]})
+                        print(f"  🔎 Confirmed by detail page: gone(404×2)={len(res['confirmed'])} "
+                              f"still listed(200)={len(res['still_listed'])} held={len(res['held'])} "
+                              f"controls_ok={res['controls_ok']}", flush=True)
+                        if res["still_listed"] and not dry_run:
+                            db.reactivate_properties(res["still_listed"])  # 一覧から漏れただけ。掲載中のまま
+                        if dry_run:
+                            stats["sold_dry_run"] = 1
+                            print(f"  🧪 Dry run — {len(res['confirmed'])} would be marked sold, nothing written", flush=True)
+                        else:
+                            sold_urls = res["confirmed"]
+                stats["sold"] = len(sold_urls)
+
                 print(f"\n📊 Diff Detection:", flush=True)
                 print(f"  New properties: {len(new_urls)}", flush=True)
                 print(f"  Sold properties: {len(sold_urls)}", flush=True)
-
                 total_new += len(new_urls)
                 total_sold += len(sold_urls)
-                report_by_category[cat_name] = {
-                    "new": len(new_urls),
-                    "sold": len(sold_urls),
-                }
-                if not collection_complete:
-                    report_by_category[cat_name]["incomplete"] = 1
-                if skip_sold and collection_complete:
-                    report_by_category[cat_name]["sold_candidates_paused"] = paused_candidates
+                report_by_category[cat_name] = stats
 
-                # Archive images of sold properties BEFORE marking inactive
+                # 写真の保存・レポート掲載・売却済みへの更新は、確認済みのものだけ
                 if sold_urls:
                     print(f"  📸 Archiving images for {len(sold_urls)} sold properties...", flush=True)
                     archived_count = 0
                     for sold_url in sold_urls:
                         prop = db.get_property_by_url(sold_url)
                         if prop:
-                            # Capture title/price/expiry for the daily report
-                            # (before mark_inactive flips is_active=0)
                             report_sold_properties.append({
                                 "url": prop.get("url") or sold_url,
                                 "title": prop.get("title"),
@@ -1531,17 +1552,10 @@ def main():
                                     db.update_archived_images(sold_url, urls_saved)
                                     archived_count += 1
                     print(f"  ✓ Archived images for {archived_count}/{len(sold_urls)} properties", flush=True)
-
                     marked = db.mark_properties_inactive(sold_urls)
                     print(f"  ✓ Marked {marked} properties as sold", flush=True)
-                
-                # Only scrape NEW properties
+
                 urls_to_scrape = new_urls
-                if urls_to_scrape:
-                    already = db.existing_urls(urls_to_scrape)
-                    if already:
-                        urls_to_scrape = [u for u in urls_to_scrape if u not in already]
-                        print(f"  Skipping {len(already)} already in database (same-day re-run / catch-up)", flush=True)
             else:
                 print(f"\n⚠️  Diff detection skipped - will scrape all {len(links)} URLs", flush=True)
                 urls_to_scrape = links
