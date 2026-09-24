@@ -1093,6 +1093,31 @@ def export_to_csv():
     except Exception as e:
         print(f"Error exporting to CSV: {e}")
 
+def collect_links_via_api(category_name: str, base_url: str, browser: Browser) -> List[str]:
+    """Collect via the JSON search API (api_collect.py); fall back to the
+    browser list pages only if the API itself cannot be used at all.
+
+    Completeness comes from the API: every city/area chunk must return exactly
+    the number of listings the site reports for it.
+    """
+    from api_collect import Collector
+    try:
+        res = Collector(category_name).collect()
+    except Exception as e:
+        print(f"[{category_name}] ⚠️  API collection failed ({e}); falling back to list pages", flush=True)
+        return collect_links(category_name, base_url, browser)
+    COLLECTION_STATS[category_name] = {
+        "expected": res["site_total"], "collected": res["collected"], "complete": res["complete"],
+        "seconds": res["seconds"], "retries": res["retries"], "chunks": res["chunks"],
+        "requests": res["requests"], "method": "api",
+    }
+    print(f"[{category_name}] ✓ API collection: {res['collected']}/{res['site_total']} links, "
+          f"{res['chunks']} chunks, {res['requests']} requests, {res['retries']} retries, "
+          f"{res['seconds']}s, complete={res['complete']}", flush=True)
+    for p in res["problems"]:
+        print(f"[{category_name}] ⚠️  {p}", flush=True)
+    return res["links"]
+
 def merge_shard_links(files: List[str], cats: Dict[str, str]) -> Dict[str, List[str]]:
     """Merge page-range shards (--pages) into one link list per category.
 
@@ -1297,6 +1322,8 @@ def main():
                        help="カテゴリ別の結果をJSONで書き出す（GitHub Actionsの集計用）")
     parser.add_argument("--collect-only", action="store_true",
                        help="リンク収集だけ行いDBには書かない（試運転用）")
+    parser.add_argument("--api", action="store_true",
+                       help="リンク収集をサイトの検索API（市町村・地区で区切り、区画ごとに件数を照合）で行う")
     parser.add_argument("--pages", default="",
                        help="リンク収集するページ範囲（例: 1-27、55-）。--collect-only と併用して分担収集する")
     parser.add_argument("--links-json", default="",
@@ -1337,7 +1364,10 @@ def main():
             # 2. Load or Collect Links
             all_links = {}
             
-            if args.links_json:
+            if args.api:
+                for cat_name, cat_url in cats.items():
+                    all_links[cat_name] = collect_links_via_api(cat_name, cat_url, browser)
+            elif args.links_json:
                 all_links = merge_shard_links([f for f in args.links_json.split(",") if f], cats)
             elif args.pages:
                 start_s, _, end_s = args.pages.partition("-")
