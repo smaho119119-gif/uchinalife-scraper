@@ -52,6 +52,43 @@ def _read_body(spec: str) -> str:
     return spec  # treat as inline body
 
 
+def _send_via_relay(url: str, subject: str, body: str, flag: str) -> int:
+    """Send through the Tokyo relay (mail-relay/, Vercel hnd1).
+
+    XServer SMTP rejects GitHub Actions' overseas IPs with 554 5.7.1, so the
+    cloud run posts here instead. The relay fixes the recipient to ALERT_TO.
+    """
+    import json
+    import urllib.request
+
+    token = os.environ.get("MAIL_RELAY_TOKEN", "")
+    data = json.dumps({"subject": subject, "body": body}).encode("utf-8")
+    for attempt in range(1, 4):
+        req = urllib.request.Request(url, data=data, method="POST", headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "uchinalife-scraper/1.0",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            if result.get("ok"):
+                try:
+                    with open(flag, "w", encoding="utf-8") as f:
+                        f.write(f"sent at {datetime.now().isoformat()} via relay\nsubject: {subject}\n")
+                except OSError:
+                    pass
+                print(f"alert sent via relay ({result.get('region')})", flush=True)
+                return 0
+            print(f"relay send failed (attempt {attempt}/3): {result}", file=sys.stderr)
+        except Exception as e:
+            detail = e.read().decode("utf-8", "replace")[:200] if hasattr(e, "read") else ""
+            print(f"relay send failed (attempt {attempt}/3): {e} {detail}", file=sys.stderr)
+        if attempt < 3:
+            time.sleep(30 * attempt)
+    return 3
+
+
 def send(subject: str, body: str, *, force: bool = False) -> int:
     _load_env()
     os.makedirs(LOGS_DIR, exist_ok=True)
@@ -60,6 +97,10 @@ def send(subject: str, body: str, *, force: bool = False) -> int:
     if not force and os.path.exists(flag):
         print(f"alert already sent today ({flag}); skipping", flush=True)
         return 0
+
+    relay_url = os.environ.get("MAIL_RELAY_URL")
+    if relay_url:
+        return _send_via_relay(relay_url, subject, body, flag)
 
     host = os.environ.get("SMTP_HOST")
     port = int(os.environ.get("SMTP_PORT", "465"))

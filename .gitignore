@@ -87,3 +87,5 @@ backups/
 # YoYo AI version control directory
 .yoyo/
 result_*.json
+mail-relay/node_modules/
+mail-relay/.vercel/

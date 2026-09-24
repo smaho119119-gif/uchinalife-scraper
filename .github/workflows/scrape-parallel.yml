@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "full = 本番（DBに書く） / collect-only = リンク収集だけ（DBに書かない試運転）"
+        description: "full = 本番（DBに書く） / collect-only = リンク収集だけ（DBに書かない試運転） / mail-test = メール送信だけ試す"
         type: choice
-        options: [full, collect-only]
+        options: [full, collect-only, mail-test]
         default: full
   # 試運転: このブランチへの push では collect-only で動かす（本番DBに触れない）
   push:
@@ -30,6 +30,7 @@ env:
 
 jobs:
   scrape:
+    if: ${{ inputs.mode != 'mail-test' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
@@ -100,6 +101,9 @@ jobs:
       SMTP_FROM: ${{ secrets.SMTP_FROM }}
       SMTP_FROM_NAME: ${{ secrets.SMTP_FROM_NAME }}
       ALERT_TO: ${{ secrets.ALERT_TO }}
+      # XServer は海外IP（Actions）を 554 で拒否するので、東京の中継から送る
+      MAIL_RELAY_URL: ${{ secrets.MAIL_RELAY_URL }}
+      MAIL_RELAY_TOKEN: ${{ secrets.MAIL_RELAY_TOKEN }}
       TZ: Asia/Tokyo
     steps:
       - uses: actions/checkout@v4
@@ -128,6 +132,12 @@ jobs:
         run: |
           mkdir -p logs
           python actions_report.py results
+
+      - name: Mail test
+        if: env.MODE == 'mail-test'
+        run: |
+          mkdir -p logs
+          python -c "import sys; from notify_failure import send; sys.exit(send('【試験】うちなーらいふ GitHub Actions からの送信', 'GitHub Actions（海外）から東京の中継を通した試験です。', force=True))"
 
       - name: Keepalive (prevent 60-day auto-disable)
         env:

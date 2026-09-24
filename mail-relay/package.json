@@ -1,0 +1,8 @@
+{
+  "name": "uchinalife-mail-relay",
+  "private": true,
+  "description": "GitHub Actions（海外IP）から XServer SMTP へ送れないため、東京リージョンから中継して送る",
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  }
+}
