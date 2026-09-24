@@ -30,6 +30,77 @@ RUN_URL = (
 )
 
 
+def _jobs() -> list[dict]:
+    """This run's jobs (name, result, start/end) from the GitHub API. [] on any error."""
+    import urllib.request
+    repo, run_id, token = os.getenv("GITHUB_REPOSITORY"), os.getenv("GITHUB_RUN_ID"), os.getenv("GH_TOKEN")
+    if not (repo and run_id and token):
+        return []
+    try:
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page=50",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+                     "User-Agent": "uchinalife-scraper"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode("utf-8")).get("jobs", [])
+    except Exception as e:
+        print(f"could not fetch jobs: {e}", file=sys.stderr)
+        return []
+
+
+def build_details(results: dict[str, dict], names: dict[str, str]) -> str:
+    """Per-machine timings and per-category collection numbers for the mail."""
+    from datetime import datetime, timedelta, timezone
+    JST = timezone(timedelta(hours=9))
+
+    def t(s):
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(JST) if s else None
+
+    lines = ["━━━━━━━━━━━━━━━━━━━", "【実行の詳細（GitHub 10台）】", ""]
+    jobs = [j for j in _jobs() if j.get("name") != "report"]
+    if jobs:
+        starts = [t(j["started_at"]) for j in jobs if j.get("started_at")]
+        ends = [t(j["completed_at"]) for j in jobs if j.get("completed_at")]
+        if starts and ends:
+            lines.append(f"全体 {min(starts):%H:%M}〜{max(ends):%H:%M}（{int((max(ends) - min(starts)).total_seconds() // 60)}分）")
+        ok = sum(1 for j in jobs if j.get("conclusion") == "success")
+        lines.append(f"成功 {ok}/{len(jobs)}台")
+        lines.append("")
+        lines.append("■ 各台の所要時間")
+        for j in sorted(jobs, key=lambda j: j.get("name", "")):
+            s, e = t(j.get("started_at")), t(j.get("completed_at"))
+            mins = f"{(e - s).total_seconds() / 60:.1f}分" if s and e else "-"
+            mark = "✅" if j.get("conclusion") == "success" else f"❌{j.get('conclusion')}"
+            lines.append(f"{mark} {j.get('name')}  {mins}")
+        lines.append("")
+    else:
+        lines.append("（各台の時間は取得できませんでした）")
+        lines.append("")
+
+    lines.append("■ カテゴリ別（サイト件数 / 取得件数）")
+    for cat in config.CATEGORIES:
+        d = results.get(cat)
+        if not d:
+            lines.append(f"❌ {names.get(cat, cat)}: 結果なし（失敗）")
+            continue
+        col = (d.get("collection") or {}).get(cat) or {}
+        bc = (d.get("by_category") or {}).get(cat) or {}
+        mark = "✅" if col.get("complete") else "⚠️不完全"
+        extra = []
+        if col.get("shards"):
+            extra.append(f"分担{col['shards']}台")
+        if col.get("retries"):
+            extra.append(f"取り直し{col['retries']}回")
+        lines.append(f"{mark} {names.get(cat, cat)}  {col.get('expected')} / {col.get('collected')}"
+                     + (f"（{'・'.join(extra)}）" if extra else ""))
+        paused = bc.get("sold_candidates_paused")
+        lines.append(f"    新着 {bc.get('new', 0)}  売れた {bc.get('sold', 0)}"
+                     + (f"  売れた候補（判定停止中） {paused}" if paused is not None else ""))
+    lines.append("")
+    lines.append(f"ログ: {RUN_URL}")
+    return "\n".join(lines)
+
+
 def main(results_dir: str) -> int:
     results: dict[str, dict] = {}
     for path in glob.glob(os.path.join(results_dir, "**", "result_*.json"), recursive=True):
@@ -76,6 +147,7 @@ def main(results_dir: str) -> int:
         sold_properties=sold,
         elapsed_seconds=elapsed,
         status=status,
+        appendix=build_details(results, names),
     )
 
 

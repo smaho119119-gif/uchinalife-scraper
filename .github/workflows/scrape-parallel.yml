@@ -260,6 +260,8 @@ jobs:
 
       - name: Send mail (always)
         if: env.MODE == 'full'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p logs
           python actions_report.py results

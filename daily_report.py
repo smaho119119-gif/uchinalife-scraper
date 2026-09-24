@@ -221,6 +221,7 @@ def send_daily_report(
     sold_properties: Iterable[dict],
     elapsed_seconds: int,
     status: str = "成功",
+    appendix: str = "",
 ) -> int:
     """Build & send. Idempotency is intentionally NOT applied here — failure
     mail uses the per-day flag, but successful daily reports should be sent
@@ -270,6 +271,8 @@ def send_daily_report(
         elapsed_seconds=elapsed_seconds,
         status=status,
     )
+    if appendix:
+        body = body + "\n\n" + appendix
     # force=True so a successful daily report isn't silenced by an earlier
     # failure-alert flag on the same day
     return send(subject, body, force=True)

@@ -596,6 +596,7 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
     stopped_early = False
     PAGE_RETRIES = 3   # 読み込み失敗・空ページは同じページを3回まで取り直す
     page_retry = 0
+    total_retries = 0
     
     try:
         while True:
@@ -632,6 +633,7 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
                 page.goto(url, wait_until='domcontentloaded', timeout=30000)
             except Exception as e:
                 page_retry += 1
+                total_retries += 1
                 if page_retry < PAGE_RETRIES:
                     print(f"[{category_name}] Failed to load page {page_num} (try {page_retry}/{PAGE_RETRIES}), retrying: {e}")
                     time.sleep(5 * page_retry)
@@ -755,6 +757,7 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
                 if not page_links and max_pages and page_num <= max_pages:
                     # 件数上はまだ物件があるはずのページが空: 一時的な不調とみて取り直す
                     page_retry += 1
+                    total_retries += 1
                     if page_retry < PAGE_RETRIES:
                         print(f"[{category_name}] Empty page {page_num} within {max_pages} pages (try {page_retry}/{PAGE_RETRIES}), retrying")
                         time.sleep(5 * page_retry)
@@ -826,6 +829,7 @@ def collect_links(category_name, base_url, browser: Browser, start_page: int = 1
         "collected": len(unique_links),
         "complete": complete,
         "seconds": round(time.time() - start_time, 1),
+        "retries": total_retries,
     }
     print(f"[{category_name}] ✓ Collection complete: {len(unique_links)} unique links in {elapsed_time:.1f}s")
     if not complete:
@@ -1100,6 +1104,7 @@ def merge_shard_links(files: List[str], cats: Dict[str, str]) -> Dict[str, List[
     shards_ok: Dict[str, bool] = {c: True for c in cats}
     expected: Dict[str, Optional[int]] = {c: None for c in cats}
     seen: Dict[str, int] = {c: 0 for c in cats}
+    retries: Dict[str, int] = {c: 0 for c in cats}
     for path in files:
         try:
             with open(path, encoding="utf-8") as f:
@@ -1114,6 +1119,7 @@ def merge_shard_links(files: List[str], cats: Dict[str, str]) -> Dict[str, List[
             merged[c].update(data["links"][c])
             stat = (data.get("collection") or {}).get(c) or {}
             shards_ok[c] = shards_ok[c] and bool(stat.get("complete"))
+            retries[c] += int(stat.get("retries") or 0)
             if stat.get("expected"):
                 expected[c] = max(expected[c] or 0, stat["expected"])
     expected_shards = int(os.getenv("SCRAPER_EXPECTED_SHARDS", "0"))
@@ -1125,7 +1131,7 @@ def merge_shard_links(files: List[str], cats: Dict[str, str]) -> Dict[str, List[
             expected[c] is None or len(links) >= expected[c] * COLLECTION_COMPLETE_RATIO
         )
         COLLECTION_STATS[c] = {"expected": expected[c], "collected": len(links),
-                               "complete": complete, "shards": seen[c]}
+                               "complete": complete, "shards": seen[c], "retries": retries[c]}
         print(f"[{c}] Merged {seen[c]} shards: {len(links)}/{expected[c]} links, complete={complete}", flush=True)
         result[c] = links
     return result
@@ -1429,6 +1435,7 @@ def main():
                     sold_urls = []
                 elif skip_sold:
                     print(f"  ⏸  Sold detection paused ({len(sold_urls)} candidates not marked)", flush=True)
+                    paused_candidates = len(sold_urls)
                     sold_urls = []
                 print(f"\n📊 Diff Detection:", flush=True)
                 print(f"  New properties: {len(new_urls)}", flush=True)
@@ -1442,6 +1449,8 @@ def main():
                 }
                 if not collection_complete:
                     report_by_category[cat_name]["incomplete"] = 1
+                if skip_sold and collection_complete:
+                    report_by_category[cat_name]["sold_candidates_paused"] = paused_candidates
 
                 # Archive images of sold properties BEFORE marking inactive
                 if sold_urls:
