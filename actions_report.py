@@ -111,6 +111,8 @@ def build_details(results: dict[str, dict], names: dict[str, str], jobs: list[di
             extra.append(f"分担{col['shards']}台")
         if col.get("retries"):
             extra.append(f"取り直し{col['retries']}回")
+        if col.get("method") == "browser-fallback":
+            extra.append("窓口異常→ブラウザ方式")
         lines.append(f"{mark} {names.get(cat, cat)}  {col.get('expected')} / {col.get('collected')}"
                      + (f"（{'・'.join(extra)}）" if extra else ""))
         paused = bc.get("sold_candidates_paused")
@@ -160,6 +162,10 @@ def main(results_dir: str) -> int:
     problems = []
     if failed:
         problems.append("失敗: " + "・".join(names.get(c, c) for c in failed))
+    fallback = [c for c, d in results.items()
+                if ((d.get("collection") or {}).get(c) or {}).get("method") == "browser-fallback"]
+    if fallback:
+        problems.append("検索窓口の異常でブラウザ方式に切替: " + "・".join(names.get(c, c) for c in fallback))
     if incomplete:
         problems.append("収集途中で打切り(成約判定なし): " + "・".join(names.get(c, c) for c in incomplete))
     if os.getenv("SCRAPER_SKIP_SOLD") == "1":

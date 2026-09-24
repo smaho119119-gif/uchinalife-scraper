@@ -1105,7 +1105,31 @@ def collect_links_via_api(category_name: str, base_url: str, browser: Browser) -
         res = Collector(category_name).collect()
     except Exception as e:
         print(f"[{category_name}] ⚠️  API collection failed ({e}); falling back to list pages", flush=True)
-        return collect_links(category_name, base_url, browser)
+        links = collect_links(category_name, base_url, browser)
+        COLLECTION_STATS.setdefault(category_name, {}).update(
+            {"method": "browser-fallback", "api_problems": [f"API error: {e}"[:200]]})
+        return links
+
+    # 前回の記録より2割以上少ない＝窓口の異常とみなす（黙って少ない件数を返す壊れ方の保険）
+    try:
+        previous = len(db.get_previous_snapshot_links(category_name, offset=0))
+    except Exception:
+        previous = 0
+    suspicious = list(res["problems"])
+    if previous and res["collected"] < previous * 0.8:
+        suspicious.append(f"collected {res['collected']} is <80% of previous snapshot {previous}")
+    if suspicious:
+        for p in suspicious:
+            print(f"[{category_name}] ⚠️  API result suspicious: {p}", flush=True)
+        print(f"[{category_name}] ↪ falling back to list pages", flush=True)
+        links = collect_links(category_name, base_url, browser)
+        stat = COLLECTION_STATS.get(category_name, {})
+        stat["method"] = "browser-fallback"
+        stat["api_problems"] = suspicious
+        if previous and len(links) < previous * 0.8:
+            stat["complete"] = False
+            print(f"[{category_name}] ⚠️  list pages also short ({len(links)} vs previous {previous}) — incomplete", flush=True)
+        return links
     COLLECTION_STATS[category_name] = {
         "expected": res["site_total"], "collected": res["collected"], "complete": res["complete"],
         "seconds": res["seconds"], "retries": res["retries"], "chunks": res["chunks"],

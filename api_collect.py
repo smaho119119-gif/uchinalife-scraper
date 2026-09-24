@@ -128,6 +128,11 @@ class Collector:
                 if got is not None:
                     links += got
         unique = list(dict.fromkeys(links))
+        # 窓口がエラーを出さずに壊れた値を返す場合の保険（0件・件数の辻褄が合わない）
+        if site_total <= 0 or not unique:
+            self.problems.append(f"API returned no listings (site_total={site_total}, collected={len(unique)})")
+        if abs(city_sum - site_total) > max(5, site_total * 0.005):
+            self.problems.append(f"city counts {city_sum} do not add up to site total {site_total}")
         complete = not self.problems and len(unique) >= site_total * 0.995
         return {
             "category": self.category,
