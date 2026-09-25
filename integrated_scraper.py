@@ -1544,7 +1544,8 @@ def main():
                                 "expiry_date": prop.get("expiry_date"),
                                 "last_seen_date": prop.get("last_seen_date"),
                             })
-                            if prop.get("images"):
+                            # 溜まった分の一掃（cleanup）では写真の保存を省く（件数が多く時間上限を超えるため）
+                            if prop.get("images") and not allow_mass:
                                 urls_saved = archive_sold_property_images(
                                     sold_url, prop["images"], cat_name
                                 )
