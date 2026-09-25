@@ -39,6 +39,7 @@ class Collector:
         self.requests = 0
         self.retries = 0
         self.problems: list[str] = []
+        self.records: dict[str, dict] = {}   # permalink → API record（市場データの同期に使う）
 
     def _get(self, url: str, params: dict | None = None, *, as_json: bool = True):
         last = None
@@ -85,7 +86,10 @@ class Collector:
                 b = j["data"]["bukkens"]
                 total = int(b["total"])
                 last_page = int(b["last_page"])
-                urls += [d["permalink"] for d in b["data"] if d.get("permalink")]
+                for d in b["data"]:
+                    if d.get("permalink"):
+                        urls.append(d["permalink"])
+                        self.records[d["permalink"]] = d
                 page += 1
             unique = list(dict.fromkeys(urls))
             if total == len(unique):
@@ -147,6 +151,7 @@ class Collector:
             "problems": self.problems,
             "seconds": round(time.time() - t0, 1),
             "links": unique,
+            "records": [self.records[u] for u in unique if u in self.records],
         }
 
 
@@ -156,7 +161,7 @@ def main() -> int:
     ap.add_argument("--out", default="")
     a = ap.parse_args()
     res = Collector(a.category).collect()
-    summary = {k: v for k, v in res.items() if k != "links"}
+    summary = {k: v for k, v in res.items() if k not in ("links", "records")}
     print(json.dumps(summary, ensure_ascii=False))
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:

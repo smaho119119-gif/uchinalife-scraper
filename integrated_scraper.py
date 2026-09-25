@@ -39,6 +39,8 @@ GENRE_NAMES: Dict[str, str] = config.GENRE_NAMES
 # be misread as sold (2026-09-24: jukyo stopped at 2,100/3,787 by the 600s cap).
 COLLECTION_STATS: Dict[str, Dict[str, Any]] = {}
 COLLECTION_COMPLETE_RATIO = 0.97
+# 検索APIの生データ（PROPERTY AI の市場データ同期に使う）。ブラウザ方式に切り替えたカテゴリには無い。
+API_RECORDS: Dict[str, List[dict]] = {}
 
 # --- Setup ---
 if not os.path.exists(OUTPUT_DIR):
@@ -1140,6 +1142,7 @@ def collect_links_via_api(category_name: str, base_url: str, browser: Browser) -
           f"{res['seconds']}s, complete={res['complete']}", flush=True)
     for p in res["problems"]:
         print(f"[{category_name}] ⚠️  {p}", flush=True)
+    API_RECORDS[category_name] = res.get("records") or []
     return res["links"]
 
 def merge_shard_links(files: List[str], cats: Dict[str, str]) -> Dict[str, List[str]]:
@@ -1441,6 +1444,26 @@ def main():
                 json.dump(out, f, ensure_ascii=False)
         print(json.dumps(COLLECTION_STATS, ensure_ascii=False), flush=True)
         return
+
+    # PROPERTY AI（東京）の市場データへ同期。失敗しても本体は止めず、メールに出す。
+    try:
+        import market_sync
+        if market_sync.enabled():
+            for c in cats:
+                recs = API_RECORDS.get(c)
+                if not recs:
+                    continue
+                complete = COLLECTION_STATS.get(c, {}).get("complete", False) and \
+                    COLLECTION_STATS.get(c, {}).get("method") == "api"
+                try:
+                    st = market_sync.sync(c, recs, complete)
+                    COLLECTION_STATS.setdefault(c, {})["market_sync"] = st
+                    print(f"[{c}] ⇪ PROPERTY AI sync: {st}", flush=True)
+                except Exception as e:
+                    COLLECTION_STATS.setdefault(c, {})["market_sync"] = {"error": str(e)[:200]}
+                    print(f"[{c}] ⚠️  PROPERTY AI sync failed: {e}", flush=True)
+    except Exception as e:
+        print(f"⚠️  market sync setup failed: {e}", flush=True)
 
     # 3. Process each category with database integration
     total_new = 0
