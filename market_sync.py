@@ -128,6 +128,8 @@ def to_row(category: str, r: dict) -> dict | None:
         "parking_disp": (str(r.get("parking_disp") or "").strip() or None),
         "catch_phrase": (str(r.get("catch_phrase_web") or "").strip()[:300] or None),
         "kind_disp": r.get("bukken_type_disp"),
+        "image_count": int(r.get("image_count") or 0),
+        "has_video": bool(r.get("video_youtube_id")),
     }
 
 
