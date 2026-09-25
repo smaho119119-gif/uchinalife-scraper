@@ -92,6 +92,38 @@ def _shade(value: int, max_value: int) -> str:
     return steps[min(len(steps) - 1, int(len(steps) * value / (max_value + 1)))]
 
 
+POPULAR_API = ("https://rtrorhmmsjvbmlulcxra.supabase.co/functions/v1/property-ai-api"
+               "?forceFunctionRegion=ap-northeast-1&action=market-popular&limit=10")
+SAGASU_URL = "https://fudosan.nextcode.ltd/sagasu"
+KIND = {"jukyo": "賃貸", "house": "一戸建て", "mansion": "マンション", "tochi": "土地", "jigyo": "店舗・事務所"}
+
+
+def _popular_html() -> str:
+    """お気に入り数の多い物件の上位（PROPERTY AI の公開API）。取れなければ空文字＝節ごと出さない。"""
+    try:
+        import requests
+        items = requests.get(POPULAR_API, timeout=20).json().get("listings") or []
+    except Exception:
+        return ""
+    if not items:
+        return ""
+    rows = ""
+    for i, x in enumerate(items, 1):
+        man = (x.get("price_yen") or 0) / 10000
+        price = "" if not man else (f"月{man:.1f}万円" if x.get("category") == "jukyo" else f"{round(man):,}万円")
+        where = " ".join(v for v in (x.get("municipality"), x.get("area_name")) if v)
+        madori = x.get("madori") if x.get("madori") not in (None, "", "-", "－") else None
+        rows += (f'<tr><td style="padding:6px 8px 6px 0;font-size:13px;font-weight:900;color:{MUTED};vertical-align:top;width:1%">{i}</td>'
+                 f'<td style="padding:6px 8px 6px 0;font-size:14px;font-weight:900;color:{PINK};white-space:nowrap;vertical-align:top;width:1%">♥ {x.get("favorite_count") or 0:,}</td>'
+                 f'<td style="padding:6px 0;font-size:14px;line-height:1.5;border-bottom:1px solid {LINE}">'
+                 f'<a href="{_e(x.get("source_url") or "")}" style="color:{INK};font-weight:800;text-decoration:none">{_e((x.get("title") or "")[:40])}</a><br>'
+                 f'<span style="font-size:13px;color:{MUTED};font-weight:700">{_e(KIND.get(x.get("category"), x.get("kind_disp") or ""))}・{_e(where)}'
+                 f'{("・" + _e(madori)) if madori else ""}{("・" + price) if price else ""}</span></td></tr>')
+    return ('<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' + rows + '</table>'
+            f'<div style="padding-top:10px;font-size:13px;color:{MUTED}">♥＝うちなーらいふでお気に入りに入れた人の数（掲載からの合計）。'
+            f'<a href="{SAGASU_URL}" style="color:{TEAL};font-weight:800">テーマ別ページ（海・ペット・車・店舗付き）</a></div>')
+
+
 def _section(title: str, color: str, inner: str) -> str:
     return (f'<tr><td style="padding:22px 20px 6px">'
             f'<div style="font-size:18px;font-weight:900;color:{color};border-left:6px solid {color};padding-left:10px">{_e(title)}</div>'
@@ -282,9 +314,11 @@ def build_html(*, results: dict[str, dict], jobs: list[dict], status: str, run_u
             f'color:{badge_color};font-weight:900;font-size:15px;padding:8px 12px;border-radius:10px;line-height:1.5">{badge_text}</div></td></tr>'
             f'<tr><td style="padding:10px 14px 0">{cards}</td></tr>')
 
+    popular = _popular_html()
     body = (head
             + _section("カテゴリ別（今日）", TEAL, table)
             + _section("新着の内訳", ORANGE, bars)
+            + (_section("人気の物件（お気に入りが多い順）", PINK, popular) if popular else "")
             + (_section("カレンダー（直近5週）", TEAL, cal) if hist else "")
             + (_section("掲載数の推移", "#1d4ed8", trend) if counts else "")
             + _section("実行の詳細（GitHub）", "#6d28d9", run_head + runs)
