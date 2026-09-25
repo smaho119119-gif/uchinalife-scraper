@@ -58,8 +58,8 @@ def to_row(category: str, r: dict) -> dict | None:
     outlier = False
     if price is None or area is None or area < 10:
         outlier = True
-    elif category == "tochi" and price / area < 10000:
-        outlier = True                    # 打ち間違い（2.398万円 など）
+    elif category == "tochi" and price / area < 1000:
+        outlier = True                    # 打ち間違い（2.398万円 など）。北部・離島は1万円/㎡未満も実在する
     elif price > 1_000_000_000:
         outlier = True
     if re.search(r"墓|霊園", title) or "〜" in price_note or "～" in price_note:

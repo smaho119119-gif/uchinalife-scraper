@@ -36,9 +36,9 @@ permissions:
   actions: write   # keepalive（60日無動作での自動停止を防ぐ）
 
 env:
-  # 売れた判定のモード（定期実行は SOLD_MODE_DEFAULT）
-  SOLD_MODE: ${{ inputs.sold_mode || 'skip' }}
-  SCRAPER_SKIP_SOLD: ${{ (inputs.sold_mode || 'skip') == 'skip' && '1' || '' }}
+  # 売れた判定のモード（定期実行は normal＝詳細ページで確認して確定。2026-09-25 一掃済み）
+  SOLD_MODE: ${{ inputs.sold_mode || 'normal' }}
+  SCRAPER_SKIP_SOLD: ${{ inputs.sold_mode == 'skip' && '1' || '' }}
   SCRAPER_SOLD_DRY_RUN: ${{ inputs.sold_mode == 'dry-run' && '1' || '' }}
   SCRAPER_ALLOW_MASS_SOLD: ${{ (inputs.sold_mode == 'cleanup' || inputs.sold_mode == 'dry-run') && '1' || '' }}
   MODE: ${{ github.event_name == 'push' && 'collect-only' || inputs.mode || 'full' }}
