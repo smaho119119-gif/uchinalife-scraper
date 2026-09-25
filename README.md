@@ -1,162 +1,46 @@
-# うちなーらいふ不動産スクレイピングツール
+# うちなーらいふ 物件収集
 
-沖縄県の不動産情報を自動収集するスクレイピングツール
+e-uchina.net（うちなーらいふ）の掲載物件を毎晩集め、新着・売れた物件を記録して、結果をメールで送る。
+Mac では動かさない。**GitHub Actions だけ**で動く。
 
-## 🚀 機能
+## いつ・どこで動くか
 
-- **自動スクレイピング**: GitHub Actionsで毎日自動実行
-- **差分検出**: 新規物件と売却済み物件を自動検出
-- **データベース対応**: SQLite / Supabase
-- **ダッシュボード**: Next.jsベースの分析ダッシュボード
+- 毎日 **03:17 JST**（`.github/workflows/scrape-parallel.yml` の cron `17 18 * * *`）。00分ちょうどは GitHub が混んで実行が飛ぶのでずらしている
+- 8種類（jukyo / jigyo / yard / parking / tochi / mansion / house / sonota）を **8台で同時に**集める。全体で約8分
+- 結果は成否にかかわらず**必ず1通**メールで届く（宛先は Secrets の `ALERT_TO`）
 
-## 📋 セットアップ（GitHub Actions）
+手動で動かすとき（Actions 画面の Run workflow）:
 
-### 1. Supabaseプロジェクト作成（オプション）
+| 項目 | 選択肢 | 意味 |
+|---|---|---|
+| mode | `full`（既定） | 収集＋DB保存＋メール |
+| | `collect-only` | 集めるだけ（DBは書かない） |
+| | `mail-test` | メールが届くかだけ試す |
+| sold_mode | `normal`（既定） | 売れた判定をする |
+| | `dry-run` | 判定するが書き込まない |
+| | `cleanup` | 誤って売れた扱いにした物件を戻す |
+| | `skip` | 売れた判定をしない |
 
-1. [Supabase](https://supabase.com)にアクセス
-2. 新規プロジェクトを作成
-3. SQL Editorで以下を実行:
+## 仕組み
 
-```sql
--- テーブル作成
-CREATE TABLE properties (
-    id BIGSERIAL PRIMARY KEY,
-    url TEXT NOT NULL UNIQUE,
-    category TEXT NOT NULL,
-    category_type TEXT,
-    category_name_ja TEXT,
-    genre_name_ja TEXT,
-    title TEXT,
-    price TEXT,
-    favorites INTEGER DEFAULT 0,
-    update_date TEXT,
-    expiry_date TEXT,
-    images JSONB,
-    company_name TEXT,
-    property_data JSONB,
-    is_active BOOLEAN DEFAULT true,
-    first_seen_date DATE,
-    last_seen_date DATE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
+1. **一覧の取得** `api_collect.py` — サイトの検索API `/api/search` を「市町村 → 地区」の小分けで呼ぶ。サイトが返す件数と受け取った件数が一致するまで取り直し、一致しなければそのカテゴリは「不完全」とする。APIが使えないときはブラウザで一覧ページをめくる方式に自動で切り替わる
+2. **新着・売れた判定** `integrated_scraper.py` ＋ `sold_confirm.py` — 前日にあって今日無い物件は、詳細ページが **2回とも 404** のときだけ「売れた」にする。不完全なカテゴリでは判定しない。売れた扱いが全体の15%を超えたら異常とみなして止める
+3. **保存** `database.py` — Supabase（`properties` / `daily_link_snapshots`）
+4. **PROPERTY AI へ同期** `market_sync.py` — NextCode不動産の「AI相場推定」用に、東京の Supabase の `property_ai_market_*` へ送る
+5. **メール** `actions_report.py` → `html_report.py` / `daily_report.py` → `notify_failure.py` — HTMLのレポートを作り、`mail-relay/`（Vercel 東京）経由で送る。XServer の SMTP は GitHub（海外IP）からの送信を 554 で拒否するため中継している
 
-CREATE TABLE daily_link_snapshots (
-    id BIGSERIAL PRIMARY KEY,
-    snapshot_date DATE NOT NULL,
-    category TEXT NOT NULL,
-    urls JSONB NOT NULL,
-    url_count INTEGER DEFAULT 0,
-    scraped_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(snapshot_date, category)
-);
+`image_archiver.py` は物件画像の保存、`config.py` は設定。
 
--- インデックス作成
-CREATE INDEX idx_properties_url ON properties(url);
-CREATE INDEX idx_properties_category ON properties(category);
-CREATE INDEX idx_properties_is_active ON properties(is_active);
-CREATE INDEX idx_properties_first_seen ON properties(first_seen_date);
-CREATE INDEX idx_properties_last_seen ON properties(last_seen_date);
-CREATE INDEX idx_snapshots_date_category ON daily_link_snapshots(snapshot_date, category);
-```
+## 鍵
 
-4. Project Settings → API から以下を取得:
-   - `Project URL` (SUPABASE_URL)
-   - `anon public` key (SUPABASE_ANON_KEY)
+鍵は **GitHub の Secrets にだけ**置く（このリポジトリは公開）。コードやファイルに書かない。
+必要な名前は `.env.example` を参照。
 
-### 2. GitHubリポジトリ設定
-
-1. このリポジトリをGitHubにプッシュ
-2. Settings → Secrets and variables → Actions
-3. 以下のSecretsを追加:
-
-**Supabase使用時**:
-- `DATABASE_TYPE`: `supabase`
-- `SUPABASE_URL`: `https://your-project.supabase.co`
-- `SUPABASE_ANON_KEY`: `your-anon-key`
-
-**SQLiteのみ使用時**:
-- Secretsは不要（デフォルトでSQLite）
-
-### 3. 実行確認
-
-1. Actions タブを開く
-2. "Daily Property Scraper" を選択
-3. "Run workflow" で手動実行してテスト
-
-## 🏃 ローカル実行
+## 手元で試すとき
 
 ```bash
-# 依存関係インストール
-pip install -r requirements.txt
-playwright install chromium
-
-# 環境変数設定（.env）
-DATABASE_TYPE=sqlite  # または supabase
-# SUPABASE_URL=your-url
-# SUPABASE_ANON_KEY=your-key
-
-# スクレイピング実行
-python integrated_scraper.py
-
-# 強制リンク更新
-python integrated_scraper.py --force-refresh
+python3 -m venv venv && venv/bin/pip install -r requirements.txt
+venv/bin/python api_collect.py tochi          # 土地の一覧をAPIで取れるか
 ```
 
-## 📊 ダッシュボード
-
-```bash
-cd sales-dashboard
-npm install
-npm run dev
-```
-
-http://localhost:3000 でアクセス
-
-## ⚙️ 設定
-
-### 環境変数
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `DATABASE_TYPE` | `sqlite` | `sqlite` または `supabase` |
-| `SCRAPER_MAX_WORKERS` | `4` | 並列ワーカー数 |
-| `SCRAPER_MAX_PAGES` | `150` | カテゴリごとの最大ページ数 |
-| `SCRAPER_ITEMS_PER_PAGE` | `50` | 1ページあたりの件数 |
-
-### スケジュール変更
-
-`.github/workflows/daily-scraper.yml` の `cron` を編集:
-
-```yaml
-schedule:
-  - cron: '0 15 * * *'  # 毎日0時JST
-  # - cron: '0 */6 * * *'  # 6時間ごと
-  # - cron: '0 9,21 * * *'  # 1日2回（18時、6時JST）
-```
-
-## 📁 出力ファイル
-
-- `output/properties.db`: SQLiteデータベース
-- `output/*.csv`: カテゴリ別CSV
-- `logs/scraper.log`: 実行ログ
-
-## 🔧 トラブルシューティング
-
-### GitHub Actionsでタイムアウト
-
-- `SCRAPER_MAX_WORKERS` を減らす（2に設定）
-- `timeout-minutes` を増やす
-
-### 403 Forbidden エラー
-
-- すでに対策済み（ステルス機能実装済み）
-- 頻度を下げる（1日1回推奨）
-
-## 📝 ライセンス
-
-MIT
-
-## 🤝 貢献
-
-Issue・PRを歓迎します
+`requirements.txt` は numpy 2 系で pandas が壊れた事故があるので版を固定している。
