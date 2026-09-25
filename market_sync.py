@@ -42,6 +42,31 @@ def _ts_jst(v) -> str | None:
     return s.replace(" ", "T") + "+09:00"
 
 
+SEA_TEXT = re.compile(r"オーシャンビュー|海が見え|海を望|海一望|海を一望")
+GARAGE_TEXT = re.compile(r"ガレージ|車庫(?!証明)")   # 「ビルトイン」は食洗器にも当たるので使わない
+PARKING2_TEXT = re.compile(r"駐車\S{0,6}[2-9２-９]台|[2-9２-９]台(?:駐車|分|以上|可|まで)")
+SHOP_HOME_TEXT = re.compile(r"店舗付き?住宅|店舗併用住宅|店舗兼住宅|住居付き?店舗|住宅付き?店舗")
+SHOP_TEXT = re.compile(r"店舗付|店舗併用|店舗兼")
+
+
+def themes_of(category: str, r: dict) -> list[str]:
+    """テーマ別ページ（海・ペット・車・店舗付き）の印。判定はここだけに置く。"""
+    text = " ".join(str(r.get(k) or "") for k in ("catch_phrase_web", "bukken_biko", "option_biko_web", "parking_biko", "parking_disp"))
+    opts = str(r.get("options") or "")
+    out = []
+    if "option_sea" in opts or "option_coastland" in opts or SEA_TEXT.search(text):
+        out.append("sea")
+    if r.get("pet_type") in (1, 2):
+        out.append("pet")
+    if GARAGE_TEXT.search(text):
+        out.append("garage")
+    if PARKING2_TEXT.search(text):
+        out.append("parking2")
+    if SHOP_HOME_TEXT.search(text) or (category in ("house", "mansion", "jukyo") and SHOP_TEXT.search(text)):
+        out.append("shop")
+    return out
+
+
 def to_row(category: str, r: dict) -> dict | None:
     bid = r.get("bukken_hid")
     if not bid:
@@ -50,8 +75,8 @@ def to_row(category: str, r: dict) -> dict | None:
     price = round(price_man * 10000) if price_man else None
     land = _num(r.get("tochi_space_metr"))
     building = _num(r.get("house_space_metr")) if category == "house" else None
-    unit = _num(r.get("man_senyu_metr")) if category == "mansion" else None
-    area = {"tochi": land, "house": building, "mansion": unit}.get(category)
+    unit = _num(r.get("man_senyu_metr")) if category in ("mansion", "jukyo") else None
+    area = {"tochi": land, "house": building, "mansion": unit, "jukyo": unit}.get(category)
 
     title = r.get("disp_name") or r.get("bukken_name") or ""
     price_note = str(r.get("price_disp") or "")
@@ -95,6 +120,14 @@ def to_row(category: str, r: dict) -> dict | None:
         "expires_at": _ts_jst(r.get("expired_at")),
         "dup_key": dup_key,
         "is_outlier": outlier,
+        "favorite_count": int(r.get("favorite_count") or 0),
+        "pet_type": r.get("pet_type"),
+        "pet_note": (str(r.get("pet_disp") or "").strip() or None) if r.get("pet_type") is not None else None,
+        "options": [o for o in str(r.get("options") or "").split(",") if o],
+        "themes": themes_of(category, r),
+        "parking_disp": (str(r.get("parking_disp") or "").strip() or None),
+        "catch_phrase": (str(r.get("catch_phrase_web") or "").strip()[:300] or None),
+        "kind_disp": r.get("bukken_type_disp"),
     }
 
 
