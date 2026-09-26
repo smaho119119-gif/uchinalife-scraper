@@ -47,6 +47,16 @@ GARAGE_TEXT = re.compile(r"ガレージ|車庫(?!証明)")   # 「ビルトイ�
 PARKING2_TEXT = re.compile(r"駐車\S{0,6}[2-9２-９]台|[2-9２-９]台(?:駐車|分|以上|可|まで)")
 SHOP_HOME_TEXT = re.compile(r"店舗付き?住宅|店舗併用住宅|店舗兼住宅|住居付き?店舗|住宅付き?店舗")
 SHOP_TEXT = re.compile(r"店舗付|店舗併用|店舗兼")
+REFORM_TEXT = re.compile(r"リフォーム済|リフォーム完了|リノベーション済|リノベ済")
+
+
+def _built_within_year(ym) -> bool:
+    """kenchiku_date（YYYYMM）が今から12か月前以降（完成予定の未来も含む）か。"""
+    s = str(ym or "")
+    if len(s) < 6 or not s[:6].isdigit():
+        return False
+    now = datetime.now(JST)
+    return int(s[:4]) * 12 + int(s[4:6]) >= now.year * 12 + now.month - 12
 
 
 def themes_of(category: str, r: dict) -> list[str]:
@@ -54,8 +64,19 @@ def themes_of(category: str, r: dict) -> list[str]:
     text = " ".join(str(r.get(k) or "") for k in ("catch_phrase_web", "bukken_biko", "option_biko_web", "parking_biko", "parking_disp"))
     opts = str(r.get("options") or "")
     out = []
-    if "option_sea" in opts or "option_coastland" in opts or SEA_TEXT.search(text):
+    # 事業用は海の印の名前が違う（option_ocean_view / option_close_to_the_sea）
+    if any(o in opts for o in ("option_sea", "option_coastland", "option_ocean_view", "option_close_to_the_sea")) or SEA_TEXT.search(text):
         out.append("sea")
+    # 2026-09-26 の分析でお気に入りが多かった切り口（厨房付き店舗 約2倍・新築平屋 2.2倍・リフォーム済み中古 1.4〜1.5倍）
+    # 新築: サイトの新築フラグは一部にしか付かない（2026-09 実測 66/5,392件）。広告の決まりと同じ「建ててから1年未満（建築中を含む）」で見る
+    if r.get("shinchiku_flag") in (1, "1") or r.get("bukken_shinchiku_flag") in (1, "1") or (_built_within_year(r.get("kenchiku_date")) and "中古" not in text):
+        out.append("shinchiku")
+    if category == "jigyo" and ("option_chubo" in opts or "厨房" in text):
+        out.append("kitchen")
+    if category == "house" and (str(r.get("house_kaisu_chijo") or r.get("building_house_kaisu_chijo") or "") == "1" or "平屋" in text):
+        out.append("hiraya")
+    if category == "house" and ("option_reform" in opts or "option_renovation" in opts or REFORM_TEXT.search(text)):
+        out.append("reform")
     if r.get("pet_type") in (1, 2):
         out.append("pet")
     if GARAGE_TEXT.search(text):
