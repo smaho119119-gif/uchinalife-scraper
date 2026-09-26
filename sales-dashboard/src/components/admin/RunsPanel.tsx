@@ -259,7 +259,7 @@ export function RunsPanel({ data, error }: Props) {
                                     formatter={(v, name) => [`${Number(v).toLocaleString('ja-JP')}件`, String(name)]}
                                     cursor={{ fill: '#f1f5f9' }}
                                 />
-                                <Legend wrapperStyle={{ fontSize: 14 }} />
+                                <Legend wrapperStyle={{ fontSize: 15 }} />
                                 <ReferenceLine x={METHOD_CHANGE_DATE} stroke="#b45309" strokeDasharray="4 3" />
                                 <Bar dataKey="新着" fill={CHART.new} radius={[2, 2, 0, 0]} isAnimationActive={false} />
                                 <Bar dataKey="売れた" fill={CHART.sold} radius={[2, 2, 0, 0]} isAnimationActive={false} />

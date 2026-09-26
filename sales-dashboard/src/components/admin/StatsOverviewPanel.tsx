@@ -23,10 +23,13 @@ interface Props {
     stats: Stats | null;
     statsError: string | null;
     latestRun: Run | null;
+    runsLoaded: boolean;
     workflowUrl: string;
 }
 
-export function StatsOverviewPanel({ stats, statsError, latestRun, workflowUrl }: Props) {
+export function StatsOverviewPanel({ stats, statsError, latestRun, runsLoaded, workflowUrl }: Props) {
+    const waiting = !stats && !statsError;
+    const count = (n: number | undefined) => (waiting ? '読み込み中…' : `${fmtNum(n)}件`);
     const chartData = useMemo(
         () =>
             CATEGORY_ORDER.map((c) => ({ name: catLabel(c), 件数: stats?.categories?.[c] ?? 0 })),
@@ -38,11 +41,11 @@ export function StatsOverviewPanel({ stats, statsError, latestRun, workflowUrl }
             {statsError && <ErrorNote>物件数を取得できませんでした（{statsError}）</ErrorNote>}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <StatTile label="DBの物件（売れた物件を含む）" value={`${fmtNum(stats?.total)}件`} />
-                <StatTile label="いま掲載中" value={`${fmtNum(stats?.active)}件`} tone="ok" />
+                <StatTile label="DBの物件（売れた物件を含む）" value={count(stats?.total)} />
+                <StatTile label="いま掲載中" value={count(stats?.active)} tone="ok" />
                 <StatTile
                     label="物件データの最終更新（日本時間）"
-                    value={<span className="text-xl">{fmtJst(stats?.lastUpdated)}</span>}
+                    value={<span className="text-xl">{waiting ? '読み込み中…' : fmtJst(stats?.lastUpdated)}</span>}
                     note={stats?.lastSnapshotDate ? `最新の掲載件数の記録: ${fmtDay(stats.lastSnapshotDate, true)}` : undefined}
                 />
                 <StatTile
@@ -53,7 +56,7 @@ export function StatsOverviewPanel({ stats, statsError, latestRun, workflowUrl }
                                 {fmtDay(latestRun.snapshot_date)} {conclusionPill(latestRun.conclusion)}
                             </span>
                         ) : (
-                            <span className="text-xl text-slate-500">記録なし</span>
+                            <span className="text-xl text-slate-500">{runsLoaded ? '記録なし' : '読み込み中…'}</span>
                         )
                     }
                     note={latestRun ? `${eventLabel(latestRun.event)}・#${latestRun.run_number ?? '—'}` : '取得履歴タブを参照'}
