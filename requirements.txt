@@ -9,3 +9,8 @@ pillow==12.0.0
 python-dotenv==1.2.1
 openpyxl==3.1.2
 psycopg2-binary==2.9.13
+# 海岸線・小学校の地図データ（地理院ベクトルタイル）を読む。numpy 1.26 のまま入ることを 2026-09-27 に確認
+mapbox-vector-tile==2.2.0
+protobuf==6.33.6
+shapely==2.1.2
+pyclipper==1.4.0

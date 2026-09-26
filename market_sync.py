@@ -20,6 +20,8 @@ from datetime import date, datetime, timedelta, timezone
 
 import requests
 
+import geo_near
+
 JST = timezone(timedelta(hours=9))
 BATCH = 500
 
@@ -151,6 +153,8 @@ def to_row(category: str, r: dict) -> dict | None:
         "kind_disp": r.get("bukken_type_disp"),
         "image_count": int(r.get("image_count") or 0),
         "has_video": bool(r.get("video_youtube_id")),
+        # 海・ゆいレール駅・小学校までの直線距離（公開データから計算。分からなければ None）
+        **geo_near.near(r.get("map_ido"), r.get("map_keido")),
     }
 
 
