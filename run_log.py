@@ -280,7 +280,9 @@ def mail_fields(mail: dict | None, mode: str | None) -> tuple[bool | None, str]:
         return None, f"メール送信の工程なし（{mode or '不明'}）"
     kind = {"daily_report": "日報", "failure_alert": "全カテゴリ失敗の知らせ",
             "mail-test": "試験メール", "error": "送信前に停止"}.get(mail.get("kind"), mail.get("kind") or "メール")
-    via = {"relay": "東京の中継", "smtp": "SMTP直送", "skipped": "送信済みのため省略"}.get(mail.get("via"), mail.get("via"))
+    if mail.get("via") == "skipped":
+        return False, f"{kind}: 省略（本日は送信済み）"
+    via = {"relay": "東京の中継", "smtp": "SMTP直送"}.get(mail.get("via"), mail.get("via"))
     if mail.get("sent"):
         where = f"{via}・{mail['region']}" if mail.get("region") else (via or "経路不明")
         tries = f"・{mail['attempts']}回目で成功" if (mail.get("attempts") or 1) > 1 else ""

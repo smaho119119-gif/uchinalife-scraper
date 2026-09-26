@@ -4,6 +4,7 @@
     python tools/backfill_runs.py                        # 完了した全実行
     python tools/backfill_runs.py --run 36192412849      # 指定した実行だけ（複数可）
     python tools/backfill_runs.py --dry-run              # 送らずに組み立てた中身を表示
+    python tools/backfill_runs.py --force                # artifact 期限切れの実行も上書きする
 
 1回ごとに:
   - GitHub API … 実行の情報（番号・きっかけ・結論・時刻）と各台の時刻・結論
@@ -13,7 +14,8 @@
   - 結果ファイルに無い再掲載数・取得エラー数は logs/<cat>.log（無ければそのジョブのログ）から拾う
 組み立ては run_log.py と同じ関数を使い、source='backfill' で記録する。
 同じ実行を何度流しても行は増えない（run_id で上書き）。本番記録（live）がある実行は上書きしない。
-artifact が無い実行（mail-test・保存期限切れ）も、ジョブとログから分かる範囲で1行残す。
+artifact が無い実行（mail-test など）も、ジョブとログから分かる範囲で1行残す。
+ただし artifact が保存期限（14日）切れの実行は、前に入れた件数を薄い行で上書きしないよう飛ばす（--force で上書き）。
 
 必要なもの: gh（ログイン済み）、.env の SUPABASE_URL / SUPABASE_ANON_KEY、
 合言葉（UCHINA_RUN_LOG_TOKEN か ~/.claude/secrets/uchinalife/run_log_token）。
@@ -131,7 +133,7 @@ def sold_mode_of(env: dict[str, str]) -> str | None:
     return None  # SOLD_MODE を入れる前の実行（判定の方式は記録なし）
 
 
-def backfill_one(run: dict, dry: bool) -> tuple[bool, str]:
+def backfill_one(run: dict, dry: bool, force: bool = False) -> tuple[bool, str]:
     run_id = run["id"]
     _, jobs = run_log.fetch_run(REPO, run_id)
     cats, _ = run_log.category_names()
@@ -141,6 +143,13 @@ def backfill_one(run: dict, dry: bool) -> tuple[bool, str]:
         dl = subprocess.run(["gh", "run", "download", str(run_id), "-R", REPO, "-D", results_dir, "-p", "result-*"],
                             capture_output=True, timeout=300)
         results, notes = run_log.load_results_safe(results_dir)
+        if not results and not force:
+            # artifact の保存期限（14日）切れで、前に記録した件数をジョブだけの薄い行で上書きしない
+            arts = run_log.gh_api(f"repos/{REPO}/actions/runs/{run_id}/artifacts?per_page=100").get("artifacts", [])
+            if any(a.get("expired") for a in arts):
+                msg = "artifact の保存期限切れのため上書きしません（--force で上書き）"
+                print(f"#{run.get('run_number')} {run_id} → {msg}", flush=True)
+                return True, msg
         logs = run_log.find_category_logs(results_dir, cats)
         # artifact にログが無いカテゴリは、そのカテゴリのジョブのログから拾う
         grouped = run_log._group_jobs(jobs, cats)
@@ -193,6 +202,7 @@ def backfill_one(run: dict, dry: bool) -> tuple[bool, str]:
 
 def main(argv: list[str]) -> int:
     dry = "--dry-run" in argv
+    force = "--force" in argv
     wanted = {int(argv[i + 1]) for i, a in enumerate(argv) if a == "--run" and i + 1 < len(argv)}
     runs = list_runs()
     if wanted:
@@ -202,7 +212,7 @@ def main(argv: list[str]) -> int:
     failed = 0
     for r in runs:
         try:
-            ok, _ = backfill_one(r, dry)
+            ok, _ = backfill_one(r, dry, force)
         except Exception as e:
             ok = False
             print(f"#{r.get('run_number')} {r['id']} → 失敗: {e!r}", flush=True)

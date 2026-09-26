@@ -141,20 +141,20 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                                     <ExternalLink className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                                 </div>
                                                 <div className="p-2 bg-white dark:bg-slate-900">
-                                                    <div className="flex gap-1 mb-1">
-                                                        <Badge variant="secondary" className="text-sm">
+                                                    <div className="flex flex-wrap gap-1 mb-1 min-w-0">
+                                                        <Badge variant="secondary" className="text-sm max-w-full truncate">
                                                             {img.mode}
                                                         </Badge>
-                                                        <Badge variant="outline" className="text-sm">
+                                                        <Badge variant="outline" className="text-sm max-w-full truncate">
                                                             {img.style}
                                                         </Badge>
                                                     </div>
-                                                    <p className="text-sm text-slate-500 truncate">
+                                                    <p className="text-[15px] text-slate-700 truncate">
                                                         {img.property_url === 'unknown'
                                                             ? '未紐づけ'
                                                             : '物件紐づけ済'}
                                                     </p>
-                                                    <p className="text-sm text-slate-400">
+                                                    <p className="text-[15px] text-slate-600">
                                                         {new Date(img.created_at).toLocaleDateString('ja-JP')}
                                                     </p>
                                                 </div>
@@ -195,15 +195,15 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                                     <ExternalLink className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                                 </div>
                                                 <div className="p-2 bg-white dark:bg-slate-900">
-                                                    <div className="flex gap-1 mb-1">
-                                                        <Badge variant="secondary" className="text-sm">
+                                                    <div className="flex flex-wrap gap-1 mb-1 min-w-0">
+                                                        <Badge variant="secondary" className="text-sm max-w-full truncate">
                                                             {img.mode}
                                                         </Badge>
-                                                        <Badge variant="outline" className="text-sm">
+                                                        <Badge variant="outline" className="text-sm max-w-full truncate">
                                                             {img.style}
                                                         </Badge>
                                                     </div>
-                                                    <p className="text-sm text-slate-400">
+                                                    <p className="text-[15px] text-slate-600">
                                                         {new Date(img.created_at).toLocaleDateString('ja-JP')}
                                                     </p>
                                                 </div>

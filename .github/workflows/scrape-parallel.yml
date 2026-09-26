@@ -166,9 +166,20 @@ jobs:
         if: env.MODE == 'mail-test'
         run: |
           mkdir -p logs
-          python -c "import sys; from notify_failure import send; sys.exit(send('【試験】うちなーらいふ GitHub Actions からの送信', 'GitHub Actions（海外）から東京の中継を通した試験です。', force=True))"
+          python actions_report.py --mail-test
 
       - name: Keepalive (prevent 60-day auto-disable)
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/scrape-parallel.yml/enable" || true
+
+      # この実行の成績（各台の時刻・件数・メールの結果）を DB（uchina_scrape_runs）に残す。
+      # 前のステップが落ちても必ず走る。記録に失敗しても終了コード0（メール・本体を巻き込まない）。
+      # 依存パッケージを使わない（標準ライブラリだけ）ので、pip の失敗時も動く。
+      - name: Record run (always)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UCHINA_RUN_LOG_TOKEN: ${{ secrets.UCHINA_RUN_LOG_TOKEN }}
+          JOB_STATUS: ${{ job.status }}
+        run: python3 run_log.py results
