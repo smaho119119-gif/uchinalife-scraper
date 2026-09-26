@@ -22,6 +22,23 @@ from email.utils import formataddr
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOGS_DIR = os.path.join(PROJECT_DIR, "logs")
 
+# 直前の send() の結果（経路・中継の地域・最後のエラー文）。戻り値（終了コード）だけでは
+# 「どこから送れたか／なぜ落ちたか」が分からないので、実行記録（run_log.py）用に残す。
+LAST_RESULT: dict = {}
+
+
+def _set_last(**kw) -> None:
+    # エラー文にはSMTPの宛先・ユーザー名が入ることがある（例: 554 の拒否）。記録には伏せ字で残す
+    err = kw.get("error")
+    if err:
+        for k in ("ALERT_TO", "SMTP_USER", "SMTP_FROM", "SMTP_PASS", "MAIL_RELAY_TOKEN"):
+            v = os.environ.get(k)
+            if v and len(v) >= 4:
+                err = err.replace(v, "***")
+        kw["error"] = err
+    LAST_RESULT.clear()
+    LAST_RESULT.update(kw)
+
 
 def _load_env() -> None:
     """Lightweight .env loader — avoids the python-dotenv runtime dependency."""
@@ -66,6 +83,7 @@ def _send_via_relay(url: str, subject: str, body: str, flag: str, html: str | No
     if html:
         payload["html"] = html
     data = json.dumps(payload).encode("utf-8")
+    last_error = ""
     for attempt in range(1, 4):
         req = urllib.request.Request(url, data=data, method="POST", headers={
             "Content-Type": "application/json",
@@ -82,23 +100,31 @@ def _send_via_relay(url: str, subject: str, body: str, flag: str, html: str | No
                 except OSError:
                     pass
                 print(f"alert sent via relay ({result.get('region')})", flush=True)
+                _set_last(sent=True, exit_code=0, via="relay", region=result.get("region"),
+                          attempts=attempt, error=last_error or None)
                 return 0
+            last_error = str(result)[:300]
             print(f"relay send failed (attempt {attempt}/3): {result}", file=sys.stderr)
         except Exception as e:
             detail = e.read().decode("utf-8", "replace")[:200] if hasattr(e, "read") else ""
+            last_error = f"{e} {detail}".strip()[:300]
             print(f"relay send failed (attempt {attempt}/3): {e} {detail}", file=sys.stderr)
         if attempt < 3:
             time.sleep(30 * attempt)
+    _set_last(sent=False, exit_code=3, via="relay", region=None, attempts=3, error=last_error)
     return 3
 
 
 def send(subject: str, body: str, *, force: bool = False, html: str | None = None) -> int:
     _load_env()
     os.makedirs(LOGS_DIR, exist_ok=True)
+    LAST_RESULT.clear()
 
     flag = _today_flag()
     if not force and os.path.exists(flag):
         print(f"alert already sent today ({flag}); skipping", flush=True)
+        _set_last(sent=False, exit_code=0, via="skipped", region=None, attempts=0,
+                  error="本日は送信済みのため省略")
         return 0
 
     relay_url = os.environ.get("MAIL_RELAY_URL")
@@ -119,6 +145,8 @@ def send(subject: str, body: str, *, force: bool = False, html: str | None = Non
     ] if not v]
     if missing:
         print(f"missing SMTP env vars: {missing}", file=sys.stderr)
+        _set_last(sent=False, exit_code=2, via="smtp", region=None, attempts=0,
+                  error=f"missing SMTP env vars: {missing}")
         return 2
 
     msg = EmailMessage()
@@ -132,6 +160,7 @@ def send(subject: str, body: str, *, force: bool = False, html: str | None = Non
 
     context = ssl.create_default_context()
     # 一時的なSMTP障害で知らせが消えないよう、間を空けて3回まで試す
+    last_error = ""
     for attempt in range(1, 4):
         try:
             with smtplib.SMTP_SSL(host, port, context=context, timeout=30) as smtp:
@@ -139,10 +168,13 @@ def send(subject: str, body: str, *, force: bool = False, html: str | None = Non
                 smtp.send_message(msg)
             break
         except Exception as e:
+            last_error = str(e)[:300]
             print(f"smtp send failed (attempt {attempt}/3): {e}", file=sys.stderr)
             if attempt == 3:
+                _set_last(sent=False, exit_code=3, via="smtp", region=None, attempts=3, error=last_error)
                 return 3
             time.sleep(30 * attempt)
+    _set_last(sent=True, exit_code=0, via="smtp", region=None, attempts=attempt, error=last_error or None)
 
     # Only mark as sent on success
     try:

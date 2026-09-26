@@ -48,7 +48,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                         <CardTitle className="text-sm font-medium text-slate-600">DB登録画像</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-pink-600">
+                        <div className="text-3xl font-bold text-teal-700">
                             {images.length}
                             <span className="text-lg text-slate-400">件</span>
                         </div>
@@ -59,7 +59,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                         <CardTitle className="text-sm font-medium text-slate-600">ローカルのみ</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-amber-600">
+                        <div className="text-3xl font-bold text-slate-800">
                             {localOnly.length}
                             <span className="text-lg text-slate-400">件</span>
                         </div>
@@ -70,7 +70,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                         <CardTitle className="text-sm font-medium text-slate-600">合計</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold text-emerald-600">
+                        <div className="text-3xl font-bold text-slate-800">
                             {images.length + localOnly.length}
                             <span className="text-lg text-slate-400">件</span>
                         </div>
@@ -107,7 +107,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                 <CardContent>
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
-                            <Loader2 className="h-8 w-8 animate-spin text-pink-500" />
+                            <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
                         </div>
                     ) : (
                         <div className="space-y-6">
@@ -122,7 +122,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                             <button
                                                 type="button"
                                                 key={img.id}
-                                                className="group relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-pink-400 transition-all cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-400"
+                                                className="group relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-teal-400 transition-all cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
                                                 onClick={() => setPreviewUrl(img.image_url)}
                                                 aria-label={`${img.filename} をプレビュー`}
                                             >
@@ -142,24 +142,24 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                                 </div>
                                                 <div className="p-2 bg-white dark:bg-slate-900">
                                                     <div className="flex gap-1 mb-1">
-                                                        <Badge variant="secondary" className="text-[10px]">
+                                                        <Badge variant="secondary" className="text-sm">
                                                             {img.mode}
                                                         </Badge>
-                                                        <Badge variant="outline" className="text-[10px]">
+                                                        <Badge variant="outline" className="text-sm">
                                                             {img.style}
                                                         </Badge>
                                                     </div>
-                                                    <p className="text-[10px] text-slate-500 truncate">
+                                                    <p className="text-sm text-slate-500 truncate">
                                                         {img.property_url === 'unknown'
                                                             ? '未紐づけ'
                                                             : '物件紐づけ済'}
                                                     </p>
-                                                    <p className="text-[10px] text-slate-400">
+                                                    <p className="text-sm text-slate-400">
                                                         {new Date(img.created_at).toLocaleDateString('ja-JP')}
                                                     </p>
                                                 </div>
                                                 {!img.file_exists && (
-                                                    <div className="absolute top-1 right-1 bg-red-500 text-white text-[8px] px-1 rounded">
+                                                    <div className="absolute top-1 right-1 bg-red-500 text-white text-xs px-1 rounded">
                                                         ファイル無
                                                     </div>
                                                 )}
@@ -196,14 +196,14 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                                 </div>
                                                 <div className="p-2 bg-white dark:bg-slate-900">
                                                     <div className="flex gap-1 mb-1">
-                                                        <Badge variant="secondary" className="text-[10px]">
+                                                        <Badge variant="secondary" className="text-sm">
                                                             {img.mode}
                                                         </Badge>
-                                                        <Badge variant="outline" className="text-[10px]">
+                                                        <Badge variant="outline" className="text-sm">
                                                             {img.style}
                                                         </Badge>
                                                     </div>
-                                                    <p className="text-[10px] text-slate-400">
+                                                    <p className="text-sm text-slate-400">
                                                         {new Date(img.created_at).toLocaleDateString('ja-JP')}
                                                     </p>
                                                 </div>

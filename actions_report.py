@@ -6,12 +6,16 @@ Each matrix job (one category) writes result_<category>.json via
 (`if: always()`), so it runs even when some or all category jobs failed.
 
     python actions_report.py <results_dir>
+    python actions_report.py --mail-test      # メール送信だけ試す（mail-test モード）
 
 - every category succeeded        → daily report (status 成功)
 - some failed / collected partly  → daily report with the problem in status
 - nothing succeeded               → failure alert
 Exit code is non-zero when the mail could not be sent, so the workflow run
 turns red instead of failing silently.
+
+送信の結果（送れたか・中継の地域・終了コード・エラー文）は logs/mail_result.json に
+書く。最後の「Record run」ステップ（run_log.py）がこれを読んで実行記録に残す。
 """
 from __future__ import annotations
 
@@ -19,15 +23,98 @@ import glob
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 from config import config
 from daily_report import send_daily_report
-from notify_failure import send
+from notify_failure import LAST_RESULT, send
 
 RUN_URL = (
     f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/"
     f"{os.getenv('GITHUB_REPOSITORY', '')}/actions/runs/{os.getenv('GITHUB_RUN_ID', '')}"
 )
+MAIL_RESULT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "mail_result.json")
+
+
+def write_mail_result(exit_code: int, kind: str, error: str | None = None, path: str = MAIL_RESULT_PATH) -> None:
+    """メール送信の結果を JSON で残す。書けなくてもメール送信の結果（終了コード）は変えない。"""
+    last = dict(LAST_RESULT)
+    data = {
+        "kind": kind,  # daily_report / failure_alert / mail-test / error
+        "sent": last.get("sent") if last else exit_code == 0,
+        "exit_code": exit_code,
+        "via": last.get("via"),
+        "region": last.get("region"),
+        "attempts": last.get("attempts"),
+        "error": error or last.get("error"),
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        print(f"mail result written: sent={data['sent']} exit={exit_code} via={data['via']} region={data['region']}",
+              flush=True)
+    except OSError as e:
+        print(f"could not write mail result: {e}", file=sys.stderr)
+
+
+def load_results(results_dir: str) -> dict[str, dict]:
+    """results/**/result_<cat>.json を {カテゴリ: 中身} にまとめる（1ファイル=1カテゴリ）。"""
+    results: dict[str, dict] = {}
+    for path in glob.glob(os.path.join(results_dir, "**", "result_*.json"), recursive=True):
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        for cat in data.get("categories", []):
+            results[cat] = data
+    return results
+
+
+def build_problems(results: dict[str, dict], *, sold_dry_run: bool | None = None,
+                   skip_sold: bool | None = None, names: dict[str, str] | None = None) -> list[str]:
+    """メールのステータス欄に並べる問題の一覧。実行記録（run_log.py）も同じ文言を使う。
+
+    sold_dry_run / skip_sold を省くと、この実行の環境変数から読む。
+    """
+    names = names if names is not None else config.GENRE_NAMES
+    if sold_dry_run is None:
+        sold_dry_run = os.getenv("SCRAPER_SOLD_DRY_RUN") == "1"
+    if skip_sold is None:
+        skip_sold = os.getenv("SCRAPER_SKIP_SOLD") == "1"
+    failed = [c for c in config.CATEGORIES if c not in results]
+    incomplete = [
+        c for c, d in results.items()
+        if not (d.get("collection", {}).get(c) or {}).get("complete", True)
+    ]
+    problems = []
+    if failed:
+        problems.append("失敗: " + "・".join(names.get(c, c) for c in failed))
+    fallback = [c for c, d in results.items()
+                if ((d.get("collection") or {}).get(c) or {}).get("method") == "browser-fallback"]
+    if fallback:
+        problems.append("検索窓口の異常でブラウザ方式に切替: " + "・".join(names.get(c, c) for c in fallback))
+    if incomplete:
+        problems.append("収集途中で打切り(成約判定なし): " + "・".join(names.get(c, c) for c in incomplete))
+    def cats_with(key):
+        return [(c, (d.get("by_category") or {}).get(c, {}).get(key)) for c, d in results.items()
+                if (d.get("by_category") or {}).get(c, {}).get(key)]
+    held = cats_with("sold_held_mass")
+    if held:
+        problems.append("売れた候補が多すぎるため保留: " + "・".join(f"{names.get(c, c)}{n}件" for c, n in held))
+    bad_controls = [c for c, d in results.items() if (d.get("by_category") or {}).get(c, {}).get("sold_controls_ok") is False]
+    if bad_controls:
+        problems.append("判定の物差しが合わず売れた判定を保留: " + "・".join(names.get(c, c) for c in bad_controls))
+    if sold_dry_run:
+        would = sum(n for _, n in cats_with("sold_confirmed"))
+        problems.append(f"売れた判定は試運転（確認のみ・書き込みなし）: 確定相当 {would}件")
+    if skip_sold:
+        problems.append("売れた判定は一時停止中（新しい判定を準備中。新着の取り込みは通常どおり）")
+    return problems
+
+
+def build_status(problems: list[str], run_url: str = RUN_URL) -> str:
+    """メールのステータス欄の文言。"""
+    return "成功" if not problems else " / ".join(problems) + f"\nログ: {run_url}"
 
 
 def _jobs() -> list[dict]:
@@ -124,19 +211,10 @@ def build_details(results: dict[str, dict], names: dict[str, str], jobs: list[di
 
 
 def main(results_dir: str) -> int:
-    results: dict[str, dict] = {}
-    for path in glob.glob(os.path.join(results_dir, "**", "result_*.json"), recursive=True):
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        for cat in data.get("categories", []):
-            results[cat] = data
+    results = load_results(results_dir)
 
     names = config.GENRE_NAMES
     failed = [c for c in config.CATEGORIES if c not in results]
-    incomplete = [
-        c for c, d in results.items()
-        if not (d.get("collection", {}).get(c) or {}).get("complete", True)
-    ]
 
     if not results:
         body = (
@@ -145,7 +223,9 @@ def main(results_dir: str) -> int:
             f"失敗: {', '.join(names.get(c, c) for c in failed)}\n\n"
             f"ログ: {RUN_URL}\n"
         )
-        return send("🚨 うちなーらいふ 全カテゴリ失敗", body, force=True)
+        code = send("🚨 うちなーらいふ 全カテゴリ失敗", body, force=True)
+        write_mail_result(code, "failure_alert")
+        return code
 
     by_category: dict[str, dict[str, int]] = {}
     sold: list[dict] = []
@@ -159,32 +239,10 @@ def main(results_dir: str) -> int:
     if total_minutes is not None:
         elapsed = total_minutes * 60  # 全体の時間（最初の台の開始〜最後の台の終了）
 
-    problems = []
-    if failed:
-        problems.append("失敗: " + "・".join(names.get(c, c) for c in failed))
-    fallback = [c for c, d in results.items()
-                if ((d.get("collection") or {}).get(c) or {}).get("method") == "browser-fallback"]
-    if fallback:
-        problems.append("検索窓口の異常でブラウザ方式に切替: " + "・".join(names.get(c, c) for c in fallback))
-    if incomplete:
-        problems.append("収集途中で打切り(成約判定なし): " + "・".join(names.get(c, c) for c in incomplete))
-    def cats_with(key):
-        return [(c, (d.get("by_category") or {}).get(c, {}).get(key)) for c, d in results.items()
-                if (d.get("by_category") or {}).get(c, {}).get(key)]
-    held = cats_with("sold_held_mass")
-    if held:
-        problems.append("売れた候補が多すぎるため保留: " + "・".join(f"{names.get(c, c)}{n}件" for c, n in held))
-    bad_controls = [c for c, d in results.items() if (d.get("by_category") or {}).get(c, {}).get("sold_controls_ok") is False]
-    if bad_controls:
-        problems.append("判定の物差しが合わず売れた判定を保留: " + "・".join(names.get(c, c) for c in bad_controls))
-    if os.getenv("SCRAPER_SOLD_DRY_RUN") == "1":
-        would = sum(n for _, n in cats_with("sold_confirmed"))
-        problems.append(f"売れた判定は試運転（確認のみ・書き込みなし）: 確定相当 {would}件")
-    if os.getenv("SCRAPER_SKIP_SOLD") == "1":
-        problems.append("売れた判定は一時停止中（新しい判定を準備中。新着の取り込みは通常どおり）")
-    status = "成功" if not problems else " / ".join(problems) + f"\nログ: {RUN_URL}"
+    problems = build_problems(results, names=names)
+    status = build_status(problems)
 
-    return send_daily_report(
+    code = send_daily_report(
         by_category=by_category,
         sold_properties=sold,
         elapsed_seconds=elapsed,
@@ -192,7 +250,24 @@ def main(results_dir: str) -> int:
         appendix=build_details(results, names, jobs),
         html=_html(results, jobs, status, total_minutes),
     )
+    write_mail_result(code, "daily_report")
+    return code
+
+
+def mail_test() -> int:
+    """mail-test モード: 中継を通した試験メールを1通だけ送り、結果を残す。"""
+    code = send("【試験】うちなーらいふ GitHub Actions からの送信",
+                "GitHub Actions（海外）から東京の中継を通した試験です。", force=True)
+    write_mail_result(code, "mail-test")
+    return code
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "results"))
+    arg = sys.argv[1] if len(sys.argv) > 1 else "results"
+    try:
+        sys.exit(mail_test() if arg == "--mail-test" else main(arg))
+    except Exception as e:
+        # 送る前に落ちた（結果ファイルが壊れている等）。送れなかったことを記録に残してから落とす
+        LAST_RESULT.clear()
+        write_mail_result(1, "error", error=f"actions_report が送信前に失敗: {e!r}"[:300])
+        raise

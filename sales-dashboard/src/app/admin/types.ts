@@ -1,145 +1,175 @@
 /**
- * Shared types for the Admin page and its sub-components.
- * Extracted from page.tsx during the Round 3 split so that panels can
- * import only what they need without pulling in the entire page module.
+ * 管理画面（/admin）で使う型。API（/api/admin/*）の応答の形と合わせる。
  */
 
 export interface Stats {
     total: number;
     active: number;
     categories: Record<string, number>;
-    lastUpdated: string;
+    /** properties.updated_at の最新（実際の時刻） */
+    lastUpdated: string | null;
+    lastSnapshotDate: string | null;
+    lastScrapedAt: string | null;
 }
 
-export interface GitHubWorkflow {
-    id: number;
-    name: string;
-    status: string;
+export interface RunCategory {
+    run_id: number;
+    category: string;
+    job_conclusion?: string | null;
+    job_started_at?: string | null;
+    job_finished_at?: string | null;
+    job_minutes?: number | null;
+    expected?: number | null;
+    collected?: number | null;
+    complete?: boolean | null;
+    method?: string | null;
+    seconds?: number | null;
+    retries?: number | null;
+    chunks?: number | null;
+    requests?: number | null;
+    api_problems?: string[] | null;
+    new_count?: number | null;
+    sold_count?: number | null;
+    sold_candidates?: number | null;
+    sold_confirmed?: number | null;
+    sold_still_listed?: number | null;
+    sold_held?: number | null;
+    sold_controls_ok?: boolean | null;
+    reactivated?: number | null;
+    scrape_errors?: number | null;
+    sync_rows?: number | null;
+    sync_written?: number | null;
+    sync_outliers?: number | null;
+    sync_ended?: number | null;
+    sync_finalized?: boolean | null;
+    sync_error?: string | null;
+    elapsed_seconds?: number | null;
+}
+
+export interface Run {
+    run_id: number;
+    run_number: number | null;
+    run_attempt: number | null;
+    event: string | null;
+    mode: string | null;
+    sold_mode: string | null;
+    head_sha: string | null;
+    run_url: string | null;
+    snapshot_date: string | null;
+    created_at: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    total_minutes: number | null;
     conclusion: string | null;
-    created_at: string;
-    updated_at: string;
-    html_url: string;
+    jobs_ok: number | null;
+    jobs_total: number | null;
+    status_text: string | null;
+    problems: string[] | null;
+    expected_total: number | null;
+    collected_total: number | null;
+    new_total: number | null;
+    sold_total: number | null;
+    reactivated_total: number | null;
+    mail_sent: boolean | null;
+    mail_detail: string | null;
+    source: string | null;
+    recorded_at: string | null;
+    categories: RunCategory[];
+}
+
+export interface ActiveRun {
+    id: number;
     run_number: number;
     event: string;
-    run_started_at: string;
-    workflow_id: number;
-    path?: string;
+    status: string;
+    created_at: string;
+    run_started_at: string | null;
+    html_url: string;
 }
 
-export interface ScrapingConfig {
-    baseUrl: string;
-    maxWorkers: number;
-    itemsPerPage: number;
-    maxPagesPerCategory: number;
-    headlessMode: boolean;
-    maxRequestsPerSecond: number;
-    maxRetries: number;
-    categories: { id: string; name: string; url: string }[];
+export interface DailySeries {
+    from: string;
+    to: string;
+    snapshots: { date: string; category: string; url_count: number | null; scraped_at: string | null }[];
+    new: { date: string; count: number }[];
+    sold: { date: string; count: number }[];
 }
 
-export interface ScrapingInfo {
-    config: ScrapingConfig;
-    schedule: {
-        daily: { enabled: boolean; time: string; description: string };
-        timeout: number;
-    };
-    logFiles: { name: string; date: string; size: string }[];
-    lastSuccess: string | null;
-    checkpoint: unknown;
-}
-
-export interface ScrapingStatus {
-    isRunning: boolean;
-    pids: string[];
-    message: string;
-}
-
-export interface LogData {
-    filename: string;
-    logs: string;
-    totalLines: number;
-}
-
-export interface ScrapingProgress {
-    phase: 'collecting' | 'scraping' | 'completed' | 'unknown';
-    currentCategory: string;
-    currentPage: number;
-    collectedLinks: number;
-    processedItems: number;
-    totalItems: number;
-    totalProcessed: number;
-    checkpointProcessed: number;
-    categoryProgress: { id: string; name: string; links: number; processed: number; total: number }[];
-    currentLog: string;
-    startTime: string | null;
+export interface RunsResponse {
+    todayJst: string;
+    workflowUrl: string;
+    runs: Run[];
+    runsError: string | null;
+    active: { runs: ActiveRun[]; error: string | null; fetchedAt: string };
+    daily: DailySeries | null;
+    dailyError: string | null;
 }
 
 export interface CalendarDay {
     date: string;
-    hasLog: boolean;
-    logFile: string | null;
-    success: boolean;
-    totalLinks: number;
-    totalProcessed: number;
-    categories: Record<string, number>;
-    githubAction?: {
-        runNumber: number;
-        status: string;
-        conclusion: string | null;
-        htmlUrl: string;
-        runStartedAt: string;
-        updatedAt: string;
-    };
-    dataSources?: {
-        supabase: { saved: boolean; count: number };
-        sqlite: { saved: boolean; fileExists: boolean };
-        csv: { saved: boolean; files: string[] };
-    };
+    isFuture: boolean;
+    runs: { run_id: number; run_number: number | null; event: string | null; mode: string | null; conclusion: string | null; run_url: string | null }[];
+    listings: number | null;
+    snapshotCategories: number;
+    lastScrapedAt: string | null;
+    newCount: number;
+    soldCount: number;
 }
 
-export interface CalendarData {
+export interface CalendarResponse {
     year: number;
     month: number;
+    todayJst: string;
     days: CalendarDay[];
-    summary: {
-        totalDays: number;
-        daysWithLogs: number;
-        successDays: number;
-        totalLinksCollected: number;
-    };
+    dailyError: string | null;
+    runsError: string | null;
 }
 
-export interface DayDetails {
+export interface DayDetailResponse {
     date: string;
-    hasSuccess: boolean;
-    logs: {
-        filename: string;
-        size: string;
-        createdAt: string;
-        lineCount: number;
-        preview: string;
-        stats: { totalLinks: number; totalProcessed: number; categories: Record<string, number> };
-    }[];
-    githubAction?: {
-        runNumber: number;
-        status: string;
-        conclusion: string | null;
-        htmlUrl: string;
-        runStartedAt: string;
-        updatedAt: string;
-    };
-    dataSources?: {
-        supabase: { saved: boolean; count: number };
-        sqlite: { saved: boolean; fileExists: boolean };
-        csv: { saved: boolean; files: string[] };
-    };
-    diagnosis?: {
-        issue: string;
-        severity: 'error' | 'warning' | 'info';
-        message: string;
-        solution: string;
-    }[];
-    summary: { totalLinks: number; totalProcessed: number; categories: Record<string, number> } | null;
+    detail: {
+        date: string;
+        snapshots: { category: string; url_count: number | null; scraped_at: string | null }[];
+        new: Record<string, number>;
+        sold: Record<string, { count: number; with_images: number }>;
+    } | null;
+    detailError: string | null;
+    runs: Run[];
+    runsError: string | null;
+}
+
+export interface DbResponse {
+    uchina: {
+        today_jst: string;
+        database_bytes: number;
+        tables: { name: string; rows: number; total_bytes: number; table_bytes: number; index_bytes: number }[];
+        inventory: { category: string; active: number; sold: number }[];
+        snapshots: {
+            first_date: string | null;
+            last_date: string | null;
+            rows: number;
+            days: number;
+            last_scraped_at: string | null;
+            missing_days: string[];
+            partial_days: { date: string; categories: number }[];
+        };
+        properties_last_updated_at: string | null;
+    } | null;
+    uchinaError: string | null;
+    imageRate: { from: string; to: string; by_category: { category: string; sold: number; with_images: number }[] } | null;
+    imageRateError: string | null;
+    propertyAi: {
+        asOf?: string;
+        lastSyncedAt?: string | null;
+        byCategory?: Record<string, { active?: number; ended?: number; outliers?: number }>;
+        prices?: { day: string; rows: number; withFavorite: number }[];
+        themes?: Record<string, number>;
+        favorites?: { filled?: number; positive?: number; max?: number };
+        media?: { imageCountFilled?: number; withVideo?: number };
+        uniqueProperties?: number;
+    } | null;
+    propertyAiError: string | null;
+    comparison: { category: string; uchina: number | null; propertyAi: number | null; diff: number | null; match: boolean | null }[] | null;
 }
 
 export interface GeneratedImageItem {

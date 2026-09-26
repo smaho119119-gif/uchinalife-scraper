@@ -1495,6 +1495,8 @@ def main():
             allow_mass = os.getenv("SCRAPER_ALLOW_MASS_SOLD") == "1"
             MASS_RATIO = 0.15
 
+            # 再掲載した件数（売れた扱いから掲載中に戻した数）。戻す処理をしなかった時は None
+            reactivated: Optional[int] = None
             if collection_complete and dry_run:
                 print(f"🧪 Dry run — snapshot and reactivation not written", flush=True)
             elif collection_complete:
@@ -1512,7 +1514,9 @@ def main():
                 new_urls = [u for u in links if u not in known]
 
                 # 売れた候補 = DBで掲載中なのに、今日の「完全な」一覧に無い物件
-                stats: Dict[str, Any] = {"new": len(new_urls), "sold": 0}
+                # scrape_errors は詳細ページの取得エラー数（下の取得ループの後で上書き。取得0件なら0のまま）
+                stats: Dict[str, Any] = {"new": len(new_urls), "sold": 0,
+                                         "reactivated": reactivated, "scrape_errors": 0}
                 sold_urls: List[str] = []
                 if not collection_complete:
                     print(f"  ⚠️  Collection incomplete — sold detection skipped", flush=True)
@@ -1656,7 +1660,9 @@ def main():
                 sys.stdout.flush()
             
             total_scraped += scraped_count
-            
+            if cat_name in report_by_category:
+                report_by_category[cat_name]["scrape_errors"] = error_count
+
             print(f"\n✓ Category {cat_name} complete:", flush=True)
             print(f"  Scraped: {scraped_count}", flush=True)
             print(f"  Errors: {error_count}", flush=True)

@@ -1,8 +1,10 @@
 import NextAuth, { type AuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+// Vercel の値は末尾に改行が付いて登録されている（vercel env pull で "…\n" と出る）。
+// 入力欄からは改行を打てないので、比べる前に前後の空白・改行を落とす
+const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || 'admin').trim();
+const ADMIN_PASSWORD = (process.env.ADMIN_PASSWORD || 'admin').trim();
 
 export const authOptions: AuthOptions = {
     providers: [

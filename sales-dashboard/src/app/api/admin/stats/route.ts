@@ -1,6 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { getSupabase } from '@/lib/supabase-server';
-export const revalidate = 60;
+import { requireAdmin, NO_STORE } from '@/lib/admin-auth';
+
+// 管理データなので共有キャッシュに載せない（ログイン確認のため毎回実行する）
+export const dynamic = 'force-dynamic';
 
 const GENRES = [
     'jukyo', 'jigyo', 'parking', 'yard',
@@ -11,14 +14,20 @@ const GENRES = [
 // statement timeout once the properties table crossed ~18k rows. We fan
 // out a handful of indexed count(*) queries in parallel instead — each
 // comes back in <100ms.
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const denied = await requireAdmin(req);
+    if (denied) return denied;
     try {
         const supabase = getSupabase('service');
 
-        const [totalRes, activeRes, latestRes, ...genreRes] = await Promise.all([
+        const [totalRes, activeRes, latestRes, snapRes, ...genreRes] = await Promise.all([
             supabase.from('properties').select('*', { count: 'exact', head: true }),
             supabase.from('properties').select('*', { count: 'exact', head: true }).eq('is_active', true),
-            supabase.from('properties').select('first_seen_date').order('first_seen_date', { ascending: false }).limit(1),
+            // 最終更新は実際の時刻（updated_at）を使う。日付だけの first_seen_date を時刻として出すと
+            // 「9:00:00」のような実在しない時刻になっていた
+            supabase.from('properties').select('updated_at').order('updated_at', { ascending: false }).limit(1),
+            // urls 列（巨大）は読まない
+            supabase.from('daily_link_snapshots').select('snapshot_date, scraped_at').order('scraped_at', { ascending: false }).limit(1),
             ...GENRES.map((g) =>
                 supabase
                     .from('properties')
@@ -37,19 +46,19 @@ export async function GET() {
             categories[GENRES[i]] = res.count ?? 0;
         });
 
-        const lastUpdated = latestRes.data?.[0]?.first_seen_date ?? null;
-
         return NextResponse.json(
             {
                 total: totalRes.count ?? 0,
                 active: activeRes.count ?? 0,
                 categories,
-                lastUpdated,
+                lastUpdated: latestRes.data?.[0]?.updated_at ?? null,
+                lastSnapshotDate: snapRes.data?.[0]?.snapshot_date ?? null,
+                lastScrapedAt: snapRes.data?.[0]?.scraped_at ?? null,
             },
-            { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+            { headers: NO_STORE },
         );
     } catch (error) {
         console.error('Error fetching admin stats:', error);
-        return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500, headers: NO_STORE });
     }
 }
