@@ -6,7 +6,7 @@ import type { CalendarDay, CalendarResponse, DayDetailResponse } from '@/app/adm
 import {
     CATEGORY_ORDER,
     catLabel,
-    conclusionPill,
+    runPill,
     EmptyState,
     ErrorNote,
     eventLabel,
@@ -41,7 +41,7 @@ function dayState(d: CalendarDay): DayState {
 }
 
 const STATE_STYLE: Record<DayState, string> = {
-    future: 'border-slate-200 bg-slate-50 text-slate-400',
+    future: 'border-slate-200 bg-slate-50 text-slate-500',
     ok: 'border-teal-300 bg-teal-50 text-slate-900',
     fail: 'border-red-300 bg-red-50 text-slate-900',
     snapshot: 'border-slate-200 bg-white text-slate-900',
@@ -135,25 +135,31 @@ export function CalendarPanel() {
     const days = month && month.year === y && month.month === m ? month.days : [];
     const past = days.filter((d) => !d.isFuture);
     const states = past.map(dayState);
-    const runsInMonth = days.reduce((s, d) => s + d.runs.length, 0);
-    const okRuns = days.reduce((s, d) => s + d.runs.filter((r) => r.conclusion === 'success').length, 0);
+    // 読めなかった時に 0 と出すと「抜けは無い」と読み違えるので、読めた分だけ数える（読めなければ —）
+    const loaded = days.length > 0 && !monthError;
+    const runsOk = loaded && !month?.runsError;
+    const dailyOk = loaded && !month?.dailyError;
+    const runsInMonth = runsOk ? days.reduce((s, d) => s + d.runs.length, 0) : null;
+    const okRuns = runsOk ? days.reduce((s, d) => s + d.runs.filter((r) => r.conclusion === 'success').length, 0) : null;
+    const missingDays = runsOk && dailyOk ? states.filter((s) => s === 'missing').length : null;
+    const partialDays = runsOk && dailyOk ? states.filter((s) => s === 'partial').length : null;
 
     return (
         <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <StatTile label="実行（この月）" value={`${runsInMonth}回`} note={`うち成功 ${okRuns}回`} />
-                <StatTile label="掲載件数の記録がある日" value={`${past.filter((d) => d.snapshotCategories > 0).length}/${past.length}日`} />
+                <StatTile label="実行（この月）" value={runsInMonth === null ? '—' : `${runsInMonth}回`} note={`うち成功 ${okRuns === null ? '—' : `${okRuns}回`}`} />
+                <StatTile label="掲載件数の記録がある日" value={dailyOk ? `${past.filter((d) => d.snapshotCategories > 0).length}/${past.length}日` : '—'} />
                 <StatTile
                     label="取得が抜けた日"
-                    value={`${states.filter((s) => s === 'missing').length}日`}
-                    tone={states.some((s) => s === 'missing') ? 'warn' : 'ok'}
-                    note={`8種類そろわない日 ${states.filter((s) => s === 'partial').length}日`}
+                    value={missingDays === null ? '—' : `${missingDays}日`}
+                    tone={missingDays === null ? undefined : missingDays > 0 ? 'warn' : 'ok'}
+                    note={`8種類そろわない日 ${partialDays === null ? '—' : `${partialDays}日`}`}
                 />
                 <StatTile
                     label="新着 / 売れた（合計）"
                     value={
                         <span className="text-xl">
-                            {fmtNum(days.reduce((s, d) => s + d.newCount, 0))} / {fmtNum(days.reduce((s, d) => s + d.soldCount, 0))}
+                            {dailyOk ? fmtNum(days.reduce((s, d) => s + d.newCount, 0)) : '—'} / {dailyOk ? fmtNum(days.reduce((s, d) => s + d.soldCount, 0)) : '—'}
                         </span>
                     }
                 />
@@ -179,7 +185,7 @@ export function CalendarPanel() {
                 {month?.dailyError && <ErrorNote>掲載件数・新着・売れたを読み込めませんでした（{month.dailyError}）</ErrorNote>}
                 {month?.runsError && <ErrorNote>実行の記録を読み込めませんでした（{month.runsError}）</ErrorNote>}
 
-                <div className="grid grid-cols-7 gap-1 text-center text-sm font-semibold">
+                <div className="grid grid-cols-7 gap-1 text-center text-[15px] font-semibold">
                     {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => (
                         <div key={w} className={cn('py-1', i === 0 ? 'text-red-700' : i === 6 ? 'text-sky-700' : 'text-slate-700')}>
                             {w}
@@ -202,7 +208,7 @@ export function CalendarPanel() {
                                 data-date={d.date}
                                 aria-label={`${fmtDay(d.date, true)} ${STATE_LABEL[st]}`}
                                 className={cn(
-                                    'flex min-h-16 min-w-0 flex-col items-start rounded-md border p-1 text-left lg:min-h-24 lg:p-2',
+                                    'flex min-h-16 min-w-0 flex-col items-start rounded-md border p-1 text-left xl:min-h-24 xl:p-2',
                                     STATE_STYLE[st],
                                     d.date === today && 'ring-2 ring-teal-700',
                                     selected === d.date && 'outline outline-2 outline-offset-1 outline-slate-900',
@@ -211,12 +217,12 @@ export function CalendarPanel() {
                             >
                                 <span className="flex w-full items-center justify-between text-[15px] font-bold tabular-nums">
                                     {dayNum}
-                                    <span aria-hidden="true" className={cn('text-sm', st === 'fail' && 'text-red-700', st === 'ok' && 'text-teal-700', (st === 'missing' || st === 'partial') && 'text-amber-800')}>
+                                    <span aria-hidden="true" className={cn('text-[15px]', st === 'fail' && 'text-red-700', st === 'ok' && 'text-teal-700', (st === 'missing' || st === 'partial') && 'text-amber-800')}>
                                         {STATE_MARK[st]}
                                     </span>
                                 </span>
                                 {!d.isFuture && (
-                                    <span className="mt-auto hidden w-full space-y-0.5 text-[13px] leading-tight tabular-nums text-slate-700 lg:block">
+                                    <span className="mt-auto hidden w-full space-y-0.5 text-[15px] leading-tight tabular-nums text-slate-700 xl:block">
                                         <span className="block truncate">掲載 {compact(d.listings)}</span>
                                         <span className="block truncate">
                                             新{fmtNum(d.newCount)}・売{fmtNum(d.soldCount)}
@@ -230,7 +236,7 @@ export function CalendarPanel() {
                 <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[15px] text-slate-700">
                     {(['ok', 'fail', 'snapshot', 'partial', 'missing'] as DayState[]).map((s) => (
                         <li key={s} className="flex items-center gap-1">
-                            <span className={cn('inline-flex h-5 w-6 items-center justify-center rounded border text-xs font-bold', STATE_STYLE[s])} aria-hidden="true">
+                            <span className={cn('inline-flex h-6 w-7 items-center justify-center rounded border text-[15px] font-bold', STATE_STYLE[s])} aria-hidden="true">
                                 {STATE_MARK[s]}
                             </span>
                             {STATE_LABEL[s]}
@@ -320,7 +326,7 @@ function DayDetailView({ detail }: { detail: DayDetailResponse }) {
                                     <span className="tabular-nums">#{r.run_number}</span>
                                     <span>{eventLabel(r.event)}</span>
                                     <span className="font-normal text-slate-700">{modeLabel(r.mode)}</span>
-                                    {conclusionPill(r.conclusion)}
+                                    {runPill(r)}
                                 </div>
                                 <RunDetail run={r} />
                             </div>

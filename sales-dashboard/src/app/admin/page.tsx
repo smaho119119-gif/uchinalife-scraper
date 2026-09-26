@@ -155,7 +155,7 @@ export default function AdminPage() {
                 </div>
 
                 <TabsContent value="overview">
-                    <StatsOverviewPanel stats={stats} statsError={statsError} latestRun={latestRun} runsLoaded={runs !== null || runsError !== null} workflowUrl={runs?.workflowUrl ?? WORKFLOW_URL} />
+                    <StatsOverviewPanel stats={stats} statsError={statsError} latestRun={latestRun} runsLoaded={runs !== null || runsError !== null} runsFailed={runsError !== null || !!runs?.runsError} workflowUrl={runs?.workflowUrl ?? WORKFLOW_URL} />
                 </TabsContent>
                 <TabsContent value="runs">
                     <RunsPanel data={runs} error={runsError} />

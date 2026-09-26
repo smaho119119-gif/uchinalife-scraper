@@ -54,7 +54,8 @@ export function DbPanel({ data, error }: { data: DbResponse | null; error: strin
     const u = data?.uchina ?? null;
     const p = data?.propertyAi ?? null;
     const inv = new Map((u?.inventory ?? []).map((r) => [r.category, r]));
-    const invTotal = (u?.inventory ?? []).reduce((s, r) => ({ a: s.a + r.active, s: s.s + r.sold }), { a: 0, s: 0 });
+    // 読めていない時に 0 と出すと「掲載0件」と読み違えるので、データがある時だけ合計する（無ければ —）
+    const invTotal = u ? u.inventory.reduce((s, r) => ({ a: s.a + r.active, s: s.s + r.sold }), { a: 0, s: 0 }) : null;
     const img = data?.imageRate?.by_category ?? [];
     const imgTotal = img.reduce((s, r) => ({ sold: s.sold + r.sold, w: s.w + r.with_images }), { sold: 0, w: 0 });
     const cmp = data?.comparison ?? [];
@@ -65,8 +66,8 @@ export function DbPanel({ data, error }: { data: DbResponse | null; error: strin
             {error && <ErrorNote>DB詳細を読み込めませんでした（{error}）</ErrorNote>}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <StatTile label="うちなーらいふ 掲載中" value={`${fmtNum(invTotal.a)}件`} note="米国（us-east-1）・他アプリと共有のDB" />
-                <StatTile label="PROPERTY AI 掲載中" value={p ? `${fmtNum(Object.values(p.byCategory ?? {}).reduce((s, c) => s + (c.active ?? 0), 0))}件` : '取得できませんでした'} note="東京（ap-northeast-1）" />
+                <StatTile label="うちなーらいふ 掲載中" value={invTotal ? `${fmtNum(invTotal.a)}件` : '—'} note="米国（us-east-1）・他アプリと共有のDB" />
+                <StatTile label="PROPERTY AI 掲載中" value={p?.byCategory ? `${fmtNum(Object.values(p.byCategory).reduce((s, c) => s + (c.active ?? 0), 0))}件` : '—'} note="東京（ap-northeast-1）" />
                 <StatTile
                     label="掲載中件数の突き合わせ"
                     value={cmp.length === 0 ? '—' : mismatches === 0 ? '全カテゴリ一致' : `${mismatches}カテゴリ不一致`}
@@ -97,7 +98,7 @@ export function DbPanel({ data, error }: { data: DbResponse | null; error: strin
                                 <tbody>
                                     {u.tables.map((t) => (
                                         <tr key={t.name} className="border-t border-slate-200">
-                                            <td className={`${TD} font-mono text-sm`}>{t.name}</td>
+                                            <td className={`${TD} font-mono`}>{t.name}</td>
                                             <td className={TDR}>{fmtNum(t.rows)}</td>
                                             <td className={TDR}>{fmtBytes(t.total_bytes)}</td>
                                             <td className={TDR}>{fmtBytes(t.index_bytes)}</td>
@@ -144,9 +145,9 @@ export function DbPanel({ data, error }: { data: DbResponse | null; error: strin
                                 })}
                                 <tr className="border-t-2 border-slate-300 font-semibold">
                                     <td className={TD}>合計</td>
-                                    <td className={TDR}>{fmtNum(invTotal.a)}</td>
-                                    <td className={TDR}>{fmtNum(invTotal.s)}</td>
-                                    <td className={TDR}>{fmtNum(invTotal.a + invTotal.s)}</td>
+                                    <td className={TDR}>{fmtNum(invTotal?.a)}</td>
+                                    <td className={TDR}>{fmtNum(invTotal?.s)}</td>
+                                    <td className={TDR}>{invTotal ? fmtNum(invTotal.a + invTotal.s) : '—'}</td>
                                 </tr>
                             </tbody>
                         </table>

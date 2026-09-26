@@ -317,6 +317,12 @@ def build_run_row(*, meta: dict, results: dict[str, dict], jobs: list[dict], cat
         problems = build_problems(results, sold_dry_run=sold_dry_run, skip_sold=skip_sold, names=names)
         status = build_status(problems, meta.get("run_url") or "")
     mail_sent, mail_detail = mail_fields(mail, mode)
+    if mail_sent is False and (mail or {}).get("via") != "skipped":
+        # メールが届いていない回を「成功」と書かない（一覧の失敗バッジと詳細の状態を食い違わせない）
+        # 「日報: 送信失敗（終了コード 3・SMTP直送）: <エラー文>」→ エラー文の前まで
+        summary = mail_detail.split("）", 1)[0] + "）" if "）" in mail_detail else mail_detail
+        problems = problems + ["メール送信失敗: " + summary.replace(": 送信失敗", "", 1)]
+        status = build_status(problems, meta.get("run_url") or "")
 
     return {
         "run_id": int(meta["run_id"]),

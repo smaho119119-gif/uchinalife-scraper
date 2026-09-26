@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AlertTriangle, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -145,17 +145,53 @@ export function StatTile({ label, value, note, tone }: { label: string; value: R
     );
 }
 
-/** 表はスマホ幅で横スクロールの箱に入れる（ページ全体ははみ出さない） */
+/** 表はスマホ幅で横スクロールの箱に入れる（ページ全体ははみ出さない）。
+ *  はみ出す時は「横にずらせます」の一言と、まだ続きがある側の端のぼかしを出す */
 export function TableBox({ children, label }: { children: ReactNode; label: string }) {
+    const ref = useRef<HTMLDivElement | null>(null);
+    const [edge, setEdge] = useState<{ overflow: boolean; left: boolean; right: boolean }>({ overflow: false, left: false, right: false });
+    const measure = useCallback(() => {
+        const el = ref.current;
+        if (!el) return;
+        const overflow = el.scrollWidth > el.clientWidth + 1;
+        setEdge({ overflow, left: overflow && el.scrollLeft > 1, right: overflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 1 });
+    }, []);
+    useEffect(() => {
+        measure();
+        const el = ref.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        if (el.firstElementChild) ro.observe(el.firstElementChild);
+        return () => ro.disconnect();
+    }, [measure]);
     return (
-        <div className="max-w-full overflow-x-auto rounded-lg border border-slate-200" role="region" aria-label={label} tabIndex={0}>
-            {children}
+        <div className="max-w-full">
+            {edge.overflow && (
+                <p className="mb-1 text-right text-[15px] text-slate-600" data-testid="scroll-hint">
+                    表は横にずらせます →
+                </p>
+            )}
+            <div className="relative">
+                <div
+                    ref={ref}
+                    onScroll={measure}
+                    className="max-w-full overflow-x-auto rounded-lg border border-slate-200"
+                    role="region"
+                    aria-label={label}
+                    tabIndex={0}
+                >
+                    {children}
+                </div>
+                {edge.left && <div aria-hidden="true" className="pointer-events-none absolute inset-y-px left-px w-8 rounded-l-lg bg-gradient-to-r from-white to-transparent" />}
+                {edge.right && <div aria-hidden="true" className="pointer-events-none absolute inset-y-px right-px w-10 rounded-r-lg bg-gradient-to-l from-white via-white/70 to-transparent" data-testid="scroll-fade" />}
+            </div>
         </div>
     );
 }
 
-export const TH = 'whitespace-nowrap bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700';
-export const THR = 'whitespace-nowrap bg-slate-50 px-3 py-2 text-right text-sm font-semibold text-slate-700';
+export const TH = 'whitespace-nowrap bg-slate-50 px-3 py-2 text-left text-[15px] font-semibold text-slate-700';
+export const THR = 'whitespace-nowrap bg-slate-50 px-3 py-2 text-right text-[15px] font-semibold text-slate-700';
 export const TD = 'whitespace-nowrap px-3 py-2 text-[15px] text-slate-900';
 export const TDR = 'whitespace-nowrap px-3 py-2 text-right text-[15px] tabular-nums text-slate-900';
 
@@ -182,7 +218,7 @@ export function StatusPill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | '
     return (
         <span
             className={cn(
-                'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-sm font-semibold',
+                'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[15px] font-semibold',
                 tone === 'ok' && 'border-teal-200 bg-teal-50 text-teal-800',
                 tone === 'warn' && 'border-amber-200 bg-amber-50 text-amber-800',
                 tone === 'bad' && 'border-red-200 bg-red-50 text-red-800',
@@ -210,6 +246,15 @@ export function conclusionPill(conclusion: string | null | undefined) {
         default:
             return <StatusPill tone="warn">{conclusion}</StatusPill>;
     }
+}
+
+/** 実行の成否バッジ。GitHub の結論だけで決めず、問題（収集の打切り・メール送信失敗など）があれば「問題あり」にする */
+export function runPill(run: { conclusion: string | null | undefined; problems?: string[] | null }) {
+    const n = run.problems?.length ?? 0;
+    if (run.conclusion === 'success' && n > 0) {
+        return <StatusPill tone="warn">⚠ 問題あり</StatusPill>;
+    }
+    return conclusionPill(run.conclusion);
 }
 
 export function eventLabel(ev: string | null | undefined): string {

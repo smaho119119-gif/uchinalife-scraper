@@ -8,7 +8,8 @@ import {
     CATEGORY_ORDER,
     CHART,
     catLabel,
-    conclusionPill,
+    EmptyState,
+    runPill,
     eventLabel,
     fmtDay,
     fmtJst,
@@ -24,16 +25,18 @@ interface Props {
     statsError: string | null;
     latestRun: Run | null;
     runsLoaded: boolean;
+    /** 実行の記録を読めなかった（「記録なし」と言わない） */
+    runsFailed?: boolean;
     workflowUrl: string;
 }
 
-export function StatsOverviewPanel({ stats, statsError, latestRun, runsLoaded, workflowUrl }: Props) {
+export function StatsOverviewPanel({ stats, statsError, latestRun, runsLoaded, runsFailed = false, workflowUrl }: Props) {
     const waiting = !stats && !statsError;
-    const count = (n: number | undefined) => (waiting ? '読み込み中…' : `${fmtNum(n)}件`);
+    const count = (n: number | undefined) => (waiting ? '読み込み中…' : n === undefined || n === null ? '—' : `${fmtNum(n)}件`);
+    const cats = stats?.categories;
     const chartData = useMemo(
-        () =>
-            CATEGORY_ORDER.map((c) => ({ name: catLabel(c), 件数: stats?.categories?.[c] ?? 0 })),
-        [stats?.categories],
+        () => (cats ? CATEGORY_ORDER.map((c) => ({ name: catLabel(c), 件数: cats[c] ?? 0 })) : null),
+        [cats],
     );
 
     return (
@@ -42,7 +45,7 @@ export function StatsOverviewPanel({ stats, statsError, latestRun, runsLoaded, w
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <StatTile label="DBの物件（売れた物件を含む）" value={count(stats?.total)} />
-                <StatTile label="いま掲載中" value={count(stats?.active)} tone="ok" />
+                <StatTile label="いま掲載中" value={count(stats?.active)} tone={stats ? 'ok' : undefined} />
                 <StatTile
                     label="物件データの最終更新（日本時間）"
                     value={<span className="text-xl">{waiting ? '読み込み中…' : fmtJst(stats?.lastUpdated)}</span>}
@@ -53,10 +56,10 @@ export function StatsOverviewPanel({ stats, statsError, latestRun, runsLoaded, w
                     value={
                         latestRun ? (
                             <span className="flex flex-wrap items-center gap-2 text-xl">
-                                {fmtDay(latestRun.snapshot_date)} {conclusionPill(latestRun.conclusion)}
+                                {fmtDay(latestRun.snapshot_date)} {runPill(latestRun)}
                             </span>
                         ) : (
-                            <span className="text-xl text-slate-500">{runsLoaded ? '記録なし' : '読み込み中…'}</span>
+                            <span className="text-xl text-slate-500">{!runsLoaded ? '読み込み中…' : runsFailed ? '—（読み込めませんでした）' : '記録なし'}</span>
                         )
                     }
                     note={latestRun ? `${eventLabel(latestRun.event)}・#${latestRun.run_number ?? '—'}` : '取得履歴タブを参照'}
@@ -65,19 +68,25 @@ export function StatsOverviewPanel({ stats, statsError, latestRun, runsLoaded, w
 
             <Panel>
                 <SectionTitle sub="いま掲載中の物件（properties の is_active）">カテゴリ別の掲載中件数</SectionTitle>
+                {!chartData ? (
+                    <EmptyState title={waiting ? '読み込み中…' : 'カテゴリ別の件数を取得できませんでした'}>
+                        {!waiting && '数字が分からないため、グラフは出していません（0件という意味ではありません）。'}
+                    </EmptyState>
+                ) : (
                 <div className="h-80 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 56, left: 8, bottom: 4 }}>
+                        <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 64, left: 8, bottom: 4 }}>
                             <CartesianGrid horizontal={false} stroke={CHART.grid} />
-                            <XAxis type="number" tick={{ fontSize: 13, fill: CHART.axis }} tickFormatter={(v: number) => v.toLocaleString('ja-JP')} />
-                            <YAxis type="category" dataKey="name" width={128} tick={{ fontSize: 13, fill: '#0f172a' }} />
+                            <XAxis type="number" tick={{ fontSize: 15, fill: CHART.axis }} tickFormatter={(v: number) => v.toLocaleString('ja-JP')} />
+                            <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 15, fill: '#0f172a' }} />
                             <Tooltip formatter={(v) => [`${Number(v).toLocaleString('ja-JP')}件`, '掲載中']} cursor={{ fill: '#f1f5f9' }} />
                             <Bar dataKey="件数" fill={CHART.primary} radius={[0, 4, 4, 0]} isAnimationActive={false}>
-                                <LabelList dataKey="件数" position="right" formatter={(v: unknown) => Number(v).toLocaleString('ja-JP')} style={{ fontSize: 13, fill: '#334155' }} />
+                                <LabelList dataKey="件数" position="right" formatter={(v: unknown) => Number(v).toLocaleString('ja-JP')} style={{ fontSize: 15, fill: '#334155' }} />
                             </Bar>
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
+                )}
             </Panel>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

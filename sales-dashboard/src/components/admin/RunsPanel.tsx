@@ -23,6 +23,7 @@ import {
     catLabel,
     conclusionPill,
     dayDiff,
+    runPill,
     EmptyState,
     ErrorNote,
     eventLabel,
@@ -167,7 +168,7 @@ export function RunsPanel({ data, error }: Props) {
                 </SectionTitle>
                 {data?.dailyError && <ErrorNote>推移を読み込めませんでした（{data.dailyError}）</ErrorNote>}
                 {!trend ? (
-                    <EmptyState title="掲載件数の記録がまだありません" />
+                    <EmptyState title={!data?.daily ? '読み込めなかったため表示できません' : '掲載件数の記録がまだありません'} />
                 ) : (
                     <>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -183,8 +184,8 @@ export function RunsPanel({ data, error }: Props) {
                                         <ResponsiveContainer width="100%" height="100%">
                                             <LineChart data={trend.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                                                 <CartesianGrid vertical={false} stroke={CHART.grid} />
-                                                <XAxis dataKey="date" tickFormatter={shortDay} tick={{ fontSize: 12, fill: CHART.axis }} minTickGap={40} />
-                                                <YAxis width={48} tick={{ fontSize: 12, fill: CHART.axis }} tickFormatter={(v: number) => v.toLocaleString('ja-JP')} domain={['auto', 'auto']} />
+                                                <XAxis dataKey="date" tickFormatter={shortDay} tick={{ fontSize: 15, fill: CHART.axis }} minTickGap={40} />
+                                                <YAxis width={60} tick={{ fontSize: 15, fill: CHART.axis }} tickFormatter={(v: number) => v.toLocaleString('ja-JP')} domain={['auto', 'auto']} />
                                                 <Tooltip
                                                     labelFormatter={(l) => fmtDay(String(l), true)}
                                                     formatter={(v) => [v === null || v === undefined ? '記録なし' : `${Number(v).toLocaleString('ja-JP')}件`, catLabel(c)]}
@@ -243,14 +244,14 @@ export function RunsPanel({ data, error }: Props) {
                     </div>
                 </div>
                 {flow.length === 0 ? (
-                    <EmptyState title="新着・売れたの記録がまだありません" />
+                    <EmptyState title={!daily ? '読み込めなかったため表示できません' : '新着・売れたの記録がまだありません'} />
                 ) : (
                     <div className="h-72 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={flow} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={1}>
                                 <CartesianGrid vertical={false} stroke={CHART.grid} />
-                                <XAxis dataKey="date" tickFormatter={shortDay} tick={{ fontSize: 12, fill: CHART.axis }} minTickGap={32} />
-                                <YAxis width={52} tick={{ fontSize: 12, fill: CHART.axis }} tickFormatter={(v: number) => v.toLocaleString('ja-JP')} />
+                                <XAxis dataKey="date" tickFormatter={shortDay} tick={{ fontSize: 15, fill: CHART.axis }} minTickGap={32} />
+                                <YAxis width={62} tick={{ fontSize: 15, fill: CHART.axis }} tickFormatter={(v: number) => v.toLocaleString('ja-JP')} />
                                 <Tooltip
                                     labelFormatter={(l) => {
                                         const d = String(l);
@@ -259,7 +260,7 @@ export function RunsPanel({ data, error }: Props) {
                                     formatter={(v, name) => [`${Number(v).toLocaleString('ja-JP')}件`, String(name)]}
                                     cursor={{ fill: '#f1f5f9' }}
                                 />
-                                <Legend wrapperStyle={{ fontSize: 15 }} />
+                                <Legend wrapperStyle={{ fontSize: 15 }} formatter={(v) => <span className="text-slate-800">{String(v)}</span>} />
                                 <ReferenceLine x={METHOD_CHANGE_DATE} stroke="#b45309" strokeDasharray="4 3" />
                                 <Bar dataKey="新着" fill={CHART.new} radius={[2, 2, 0, 0]} isAnimationActive={false} />
                                 <Bar dataKey="売れた" fill={CHART.sold} radius={[2, 2, 0, 0]} isAnimationActive={false} />
@@ -276,7 +277,15 @@ export function RunsPanel({ data, error }: Props) {
                     実行の一覧
                 </SectionTitle>
                 {data?.runsError && <ErrorNote>実行の記録を読み込めませんでした（{data.runsError}）</ErrorNote>}
-                {runs.length === 0 ? (
+                {runs.length === 0 && (!data || data.runsError) ? (
+                    <EmptyState title="読み込めなかったため表示できません">
+                        GitHub 側の実行は
+                        <a href={data?.workflowUrl ?? 'https://github.com/smaho119119-gif/uchinalife-scraper/actions/workflows/scrape-parallel.yml'} target="_blank" rel="noopener noreferrer" className="mx-1 font-semibold text-teal-800 underline">
+                            GitHub Actions
+                        </a>
+                        で見られます。
+                    </EmptyState>
+                ) : runs.length === 0 ? (
                     <EmptyState title="実行の記録がまだありません">
                         毎晩の取得が終わるとここに1行ずつ増えます。GitHub 側の実行は
                         <a href={data?.workflowUrl} target="_blank" rel="noopener noreferrer" className="mx-1 font-semibold text-teal-800 underline">
@@ -290,11 +299,11 @@ export function RunsPanel({ data, error }: Props) {
                             <thead>
                                 <tr>
                                     <th className={TH}>日付</th>
+                                    <th className={TH}>結果</th>
                                     <th className={TH}>起動</th>
                                     <th className={TH}>モード</th>
                                     <th className={THR}>予定からの遅れ</th>
                                     <th className={THR}>所要</th>
-                                    <th className={TH}>結果</th>
                                     <th className={THR}>掲載合計</th>
                                     <th className={THR}>新着</th>
                                     <th className={THR}>売れた</th>
@@ -338,13 +347,13 @@ function RunRow({ run, open, onToggle }: { run: Run; open: boolean; onToggle: ()
                         <span className="ml-1 font-normal tabular-nums text-slate-600">#{run.run_number ?? '—'}</span>
                     </button>
                 </td>
+                <td className={TD}>{runPill(run)}</td>
                 <td className={TD}>{eventLabel(run.event)}</td>
                 <td className={TD}>{modeLabel(run.mode)}</td>
                 <td className={TDR}>
                     {delay === null ? '—' : delay <= 30 ? `${delay}分` : <span className="font-semibold text-amber-800">{fmtMinutes(delay)}</span>}
                 </td>
                 <td className={TDR}>{fmtMinutes(run.total_minutes)}</td>
-                <td className={TD}>{conclusionPill(run.conclusion)}</td>
                 <td className={TDR}>{fmtNum(run.collected_total)}</td>
                 <td className={TDR}>{fmtNum(run.new_total)}</td>
                 <td className={TDR}>{fmtNum(run.sold_total)}</td>
@@ -390,7 +399,13 @@ export function RunDetail({ run }: { run: Run }) {
                     </a>
                 )}
             </div>
-            {run.status_text && <div className="text-[15px] text-slate-800">状態: {run.status_text}</div>}
+            <div className="flex flex-wrap items-center gap-2 text-[15px] text-slate-800" data-testid="run-status">
+                <span className="font-semibold">状態:</span>
+                {runPill(run)}
+                {run.problems && run.problems.length > 0
+                    ? <span>問題 {run.problems.length}件（下に一覧）</span>
+                    : run.status_text && run.status_text !== '成功' && <span>{run.status_text.split('\n')[0]}</span>}
+            </div>
             {run.problems && run.problems.length > 0 && (
                 <ul className="list-disc space-y-0.5 pl-5 text-[15px] text-red-800">
                     {run.problems.map((p, i) => (

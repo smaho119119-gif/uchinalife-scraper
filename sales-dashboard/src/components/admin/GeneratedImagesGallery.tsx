@@ -1,15 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { EmptyState, Panel, SectionTitle, StatTile, StatusPill } from '@/components/admin/admin-ui';
 import {
     Loader2,
     ExternalLink,
@@ -17,7 +9,6 @@ import {
     RefreshCw,
     Database,
     FileText,
-    Image as ImageIcon,
     X,
 } from 'lucide-react';
 import type { GeneratedImageItem } from '@/app/admin/types';
@@ -41,73 +32,31 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600">DB登録画像</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-teal-700">
-                            {images.length}
-                            <span className="text-lg text-slate-400">件</span>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600">ローカルのみ</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-slate-800">
-                            {localOnly.length}
-                            <span className="text-lg text-slate-400">件</span>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-slate-600">合計</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-slate-800">
-                            {images.length + localOnly.length}
-                            <span className="text-lg text-slate-400">件</span>
-                        </div>
-                    </CardContent>
-                </Card>
+        <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <StatTile label="DB登録画像" value={<CountValue n={images.length} tone="text-teal-700" />} />
+                <StatTile label="ローカルのみ" value={<CountValue n={localOnly.length} />} />
+                <StatTile label="合計" value={<CountValue n={images.length + localOnly.length} />} />
             </div>
 
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                <ImageIcon className="h-5 w-5" />
-                                生成画像ギャラリー
-                            </CardTitle>
-                            <CardDescription>全ての生成バナー画像</CardDescription>
-                        </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={onRefresh}
-                            disabled={loading}
-                            aria-label="生成画像を再取得"
-                        >
-                            {loading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                                <RefreshCw className="h-4 w-4" />
-                            )}
-                            更新
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent>
+            <Panel>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                    <SectionTitle sub="全ての生成バナー画像">生成画像ギャラリー</SectionTitle>
+                    <button
+                        type="button"
+                        onClick={onRefresh}
+                        disabled={loading}
+                        aria-label="生成画像を再取得"
+                        className="inline-flex items-center gap-2 rounded-md border border-teal-700 bg-teal-700 px-3 py-1.5 text-[15px] font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+                    >
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+                        更新
+                    </button>
+                </div>
+                <div>
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
-                            <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+                            <Loader2 className="h-8 w-8 animate-spin text-teal-700" aria-label="読み込み中" />
                         </div>
                     ) : (
                         <div className="space-y-6">
@@ -115,18 +64,18 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                 <Section
                                     title={`DB登録済み (${images.length}件)`}
                                     icon={<Database className="h-4 w-4" />}
-                                    color="text-slate-600"
+                                    color="text-slate-800"
                                 >
                                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                                         {images.map((img) => (
                                             <button
                                                 type="button"
                                                 key={img.id}
-                                                className="group relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-teal-400 transition-all cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
+                                                className="group relative rounded-lg overflow-hidden border border-slate-200 hover:border-teal-400 transition-all cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-400"
                                                 onClick={() => setPreviewUrl(img.image_url)}
                                                 aria-label={`${img.filename} をプレビュー`}
                                             >
-                                                <div className="aspect-video bg-slate-100 dark:bg-slate-800">
+                                                <div className="aspect-video bg-slate-100">
                                                     <img
                                                         src={img.image_url}
                                                         alt={img.filename}
@@ -140,14 +89,10 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                                                     <ExternalLink className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                                 </div>
-                                                <div className="p-2 bg-white dark:bg-slate-900">
+                                                <div className="p-2 bg-white">
                                                     <div className="flex flex-wrap gap-1 mb-1 min-w-0">
-                                                        <Badge variant="secondary" className="text-sm max-w-full truncate">
-                                                            {img.mode}
-                                                        </Badge>
-                                                        <Badge variant="outline" className="text-sm max-w-full truncate">
-                                                            {img.style}
-                                                        </Badge>
+                                                        <Tag tone="info">{img.mode}</Tag>
+                                                        <Tag tone="muted">{img.style}</Tag>
                                                     </div>
                                                     <p className="text-[15px] text-slate-700 truncate">
                                                         {img.property_url === 'unknown'
@@ -159,7 +104,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                                     </p>
                                                 </div>
                                                 {!img.file_exists && (
-                                                    <div className="absolute top-1 right-1 bg-red-500 text-white text-xs px-1 rounded">
+                                                    <div className="absolute top-1 right-1 rounded bg-red-700 px-1.5 text-[15px] font-semibold text-white">
                                                         ファイル無
                                                     </div>
                                                 )}
@@ -173,18 +118,18 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                 <Section
                                     title={`ローカルのみ (${localOnly.length}件)`}
                                     icon={<FileText className="h-4 w-4" />}
-                                    color="text-amber-600"
+                                    color="text-amber-800"
                                 >
                                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                                         {localOnly.map((img) => (
                                             <button
                                                 type="button"
                                                 key={img.filename}
-                                                className="group relative rounded-lg overflow-hidden border border-amber-200 dark:border-amber-700 hover:border-amber-400 transition-all cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                                                className="group relative rounded-lg overflow-hidden border border-amber-200 hover:border-amber-400 transition-all cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
                                                 onClick={() => setPreviewUrl(img.url)}
                                                 aria-label={`${img.filename} をプレビュー`}
                                             >
-                                                <div className="aspect-video bg-slate-100 dark:bg-slate-800">
+                                                <div className="aspect-video bg-slate-100">
                                                     <img
                                                         src={img.url}
                                                         alt={img.filename}
@@ -194,14 +139,10 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                                                     <ExternalLink className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                                                 </div>
-                                                <div className="p-2 bg-white dark:bg-slate-900">
+                                                <div className="p-2 bg-white">
                                                     <div className="flex flex-wrap gap-1 mb-1 min-w-0">
-                                                        <Badge variant="secondary" className="text-sm max-w-full truncate">
-                                                            {img.mode}
-                                                        </Badge>
-                                                        <Badge variant="outline" className="text-sm max-w-full truncate">
-                                                            {img.style}
-                                                        </Badge>
+                                                        <Tag tone="info">{img.mode}</Tag>
+                                                        <Tag tone="muted">{img.style}</Tag>
                                                     </div>
                                                     <p className="text-[15px] text-slate-600">
                                                         {new Date(img.created_at).toLocaleDateString('ja-JP')}
@@ -214,15 +155,12 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                             )}
 
                             {images.length === 0 && localOnly.length === 0 && (
-                                <div className="text-center py-12 text-slate-500">
-                                    <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                                    <p>生成画像がありません</p>
-                                </div>
+                                <EmptyState title="生成画像がありません" />
                             )}
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </Panel>
 
             {previewUrl && (
                 <div
@@ -255,7 +193,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                             <a
                                 href={previewUrl}
                                 download
-                                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+                                className="bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded-lg text-[15px] font-semibold flex items-center gap-2"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <Download className="h-4 w-4" />
@@ -265,7 +203,7 @@ export function GeneratedImagesGallery({ images, localOnly, loading, onRefresh }
                                 href={previewUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+                                className="bg-white hover:bg-teal-50 text-teal-800 border border-teal-700 px-4 py-2 rounded-lg text-[15px] font-semibold flex items-center gap-2"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <ExternalLink className="h-4 w-4" />
@@ -292,11 +230,30 @@ function Section({
 }) {
     return (
         <div>
-            <h3 className={`text-sm font-semibold ${color} mb-3 flex items-center gap-2`}>
+            <h3 className={`text-[15px] font-bold ${color} mb-3 flex items-center gap-2`}>
                 {icon}
                 {title}
             </h3>
             {children}
         </div>
+    );
+}
+
+/** 件数（数字＋「件」）。「件」も本文と同じ濃さで読めるようにする */
+function CountValue({ n, tone = 'text-slate-900' }: { n: number; tone?: string }) {
+    return (
+        <span className={`text-3xl font-bold tabular-nums ${tone}`}>
+            {n}
+            <span className="ml-0.5 text-lg text-slate-600">件</span>
+        </span>
+    );
+}
+
+/** 画像の種類・スタイルの札（濃い文字に薄い背景。ほかのタブの札と同じ見た目） */
+function Tag({ tone, children }: { tone: 'info' | 'muted'; children: React.ReactNode }) {
+    return (
+        <span className="max-w-full truncate">
+            <StatusPill tone={tone}>{children}</StatusPill>
+        </span>
     );
 }
