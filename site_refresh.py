@@ -90,11 +90,17 @@ def _revalidate(base: str, token: str, deadline: float) -> dict:
             code, body, _ = _request(f"{base}/api/revalidate", method="POST", token=token,
                                      timeout=min(REQUEST_TIMEOUT, deadline - time.monotonic()))
             if code == 200:
-                return json.loads(body)
+                info = json.loads(body)
+                # 返事の形が崩れていたら送り直さず止める（辞書でない・一覧が文字列だと1文字ずつ開いてしまう）
+                if not isinstance(info, dict) or not all(isinstance(info.get(k) or [], list) for k in ("pages", "points")):
+                    raise RuntimeError("作り直しの合図の返事の形が想定と違う（サイト側の /api/revalidate を確認）")
+                return info
             last = _http_words(code)
             if code < 500:
                 break
-        except Exception as e:  # noqa: BLE001 - 通信の失敗・壊れた返事は送り直しの対象
+        except RuntimeError:
+            raise
+        except Exception as e:  # noqa: BLE001 - 通信の失敗・読めない返事は送り直しの対象
             last = f"通信の失敗（{repr(e)[:120]}）"
         if attempt < SEND_TRIES and time.monotonic() + 5 * attempt < deadline:
             time.sleep(5 * attempt)
@@ -191,7 +197,9 @@ def problem_of(site: dict | None) -> str | None:
         return None
     if site.get("error"):
         err = site["error"]
-        fix = HOW_TO_FIX_UNSET if "合言葉が未設定" in err else HOW_TO_FIX_TOKEN if "合言葉" in err else HOW_TO_FIX
+        fix = (HOW_TO_FIX_UNSET if "合言葉が未設定" in err
+               else "対処: 控えのファイルを Vercel の REVALIDATE_TOKEN と同じ値で作り直す" if "合言葉が見つからない" in err
+               else HOW_TO_FIX_TOKEN if "合言葉" in err else HOW_TO_FIX)
         return f"公開サイトの作り直しで問題（収集とは別）: {err}。{fix}"
     bad = site.get("bad") or {}
     shown = "・".join(f"{name}＝{why}" for name, why in list(bad.items())[:3])
@@ -246,7 +254,9 @@ def main() -> int:
     try:
         token = _token()
         if not token:
-            raise RuntimeError("合言葉が未設定（GitHub Secret FUDOSAN_REVALIDATE_TOKEN が無い）")
+            if os.getenv("GITHUB_ACTIONS"):
+                raise RuntimeError("合言葉が未設定（GitHub Secret FUDOSAN_REVALIDATE_TOKEN が無い）")
+            raise RuntimeError(f"合言葉が見つからない（手元: 環境変数 FUDOSAN_REVALIDATE_TOKEN も控え {TOKEN_FILE} も無い）")
         result = refresh(base, token)
     except Exception as e:  # noqa: BLE001 - 何があっても本体を巻き込まない
         result = {"ok": False, "error": str(e)[:400]}

@@ -122,6 +122,12 @@ class Revalidate(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertIn("通信の失敗", r)
 
+    def test_broken_reply_stops_without_retry(self):
+        for body in (b"[]", json.dumps({"asOf": "2026-09-28", "pages": "/abc"}).encode()):
+            r, calls = self.send([(200, body, None)] * 3)
+            self.assertEqual(len(calls), 1)
+            self.assertIn("返事の形が想定と違う", r)
+
     def test_uses_post(self):
         _, calls = self.send([(200, b"{}", None)])
         self.assertEqual(calls, ["POST"])
@@ -192,6 +198,16 @@ class Reporting(unittest.TestCase):
         unset = sr.problem_of({"ok": False, "error": "合言葉が未設定（GitHub Secret FUDOSAN_REVALIDATE_TOKEN が無い）"})
         self.assertIn("として登録", unset)
         self.assertNotIn("入れ替え", unset)  # 案内は1つだけ
+
+    def test_local_missing_token_is_not_called_github_secret(self):
+        path = os.path.join(tempfile.mkdtemp(), "site_refresh.json")
+        env = {k: v for k, v in os.environ.items() if k not in ("FUDOSAN_REVALIDATE_TOKEN", "GITHUB_ACTIONS")}
+        with mock.patch.object(sr, "RESULT_PATH", path), mock.patch.object(sr, "TOKEN_FILE", "/nonexistent"), \
+                mock.patch.dict(os.environ, env, clear=True):
+            sr.main()
+        err = json.load(open(path, encoding="utf-8"))["error"]
+        self.assertIn("合言葉が見つからない", err)
+        self.assertNotIn("Secret", sr.problem_of({"ok": False, "error": err}).split("対処:")[1])
 
     def test_main_writes_interrupted_first(self):
         # 工程の4分の打ち切りで止まっても「途中で打ち切られた」が残る
