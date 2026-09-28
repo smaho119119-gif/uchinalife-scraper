@@ -214,7 +214,7 @@ def build_details(results: dict[str, dict], names: dict[str, str], jobs: list[di
 def main(results_dir: str) -> int:
     results = load_results(results_dir)
     # 前のステップ「Refresh public site」の結果（本番 full の回だけ。記録が無ければそれも問題）
-    site = site_refresh.problem_of(site_refresh.result_for_mode(os.getenv("MODE") or "full"))
+    site = site_refresh.problem_of(site_refresh.result_for_mode(os.getenv("MODE") or None))
 
     names = config.GENRE_NAMES
     failed = [c for c in config.CATEGORIES if c not in results]

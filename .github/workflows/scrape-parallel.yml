@@ -158,7 +158,7 @@ jobs:
       # 日報より前に置き、結果を日報の問題欄に載せる。中の締め切りは150秒、ここでも4分で打ち切り、
       # 落ちても continue-on-error で後ろ（メール・記録）へ進む。結果は logs/site_refresh.json。
       - name: Refresh public site
-        if: always() && env.MODE == 'full'
+        if: ${{ !cancelled() && env.MODE == 'full' }}
         timeout-minutes: 4
         continue-on-error: true
         env:
@@ -168,7 +168,7 @@ jobs:
           python3 site_refresh.py
 
       - name: Send mail (always)
-        if: always() && env.MODE == 'full'
+        if: ${{ !cancelled() && env.MODE == 'full' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

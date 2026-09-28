@@ -12,11 +12,12 @@
 そこで:
   1. サイトの /api/revalidate に合言葉つきで合図を送り、相場データの作り置きを全部消す
   2. 返ってきたページと地図APIを全部開いて作っておく（朝一番の人を待たせない）
-  3. 合図より後に作られた版が返るまで開き直す。Vercel は消した直後の1回目にまだ古い版を返し、裏で作り直す
-     （2026-09-28 実測: 合図直後の1回目 age=51 の古い版 → 2回目 age=0）。確かめること:
+  3. 合図より後に作られた版が返るまで開き直す。消した直後の1〜2回目はまだ古い版が返り、裏で作り直される
+     （2026-09-28 実測: /sagasu/hiraya が age=57→62→3。原因は未確認）。確かめること:
        - 応答の age（配信側に置かれてからの秒数）が合図からの経過秒数以下
-       - 地図APIは中の at（作った時刻）が合図より後で、点が1件以上
-       - テーマのページは「<今日の更新日> 更新」の表示がある。トップは「集計日不明」が出ていない
+       - 地図APIは中の at（作った時刻）が合図より後、asOf（データの日付）が今日の更新日で、点が1件以上
+       - テーマ一覧とテーマのページは「<今日の更新日> 更新」、トップは「<今日の更新日>時点」の表示がある
+     更新日（asOf）が合図の返事に無いときも全部開いて作っておき、日付の確認だけ「できなかった」と問題に出す
 結果は logs/site_refresh.json に書く。日報（actions_report.py）と実行記録（run_log.py → 管理ページ）が
 result_for_mode() で読み、問題があれば problem_of() の1行を問題欄に並べる。
 全体の締め切りは DEADLINE 秒。何があっても終了コード 0（メール・記録を巻き込まない）。
@@ -44,7 +45,8 @@ DEADLINE = 150       # 全体の締め切り（秒）。report ジョブの他�
 REQUEST_TIMEOUT = 20  # 1回の通信の上限（秒）。上流の初回は数秒かかる
 SEND_TRIES = 3       # 合図を送る回数の上限
 WAIT_SECONDS = 10    # 古い版のページを開き直す前に待つ秒数（締め切りまで繰り返す）
-HOW_TO_FIX = "対処: GitHub の実行ページで report ジョブを再実行（README「公開サイトの作り直し」）"
+# report ジョブの再実行は日報がもう1通届き記録も上書きされるので、作り直しだけを手元で流す
+HOW_TO_FIX = "対処: 手元で python3 site_refresh.py（Claude に「公開サイトを作り直して」でよい。README「公開サイトの作り直し」）"
 
 # HTTP の番号 → オーナーが読んで分かる言葉
 _HTTP_WORDS = {
@@ -96,13 +98,17 @@ def _revalidate(base: str, token: str, deadline: float) -> dict:
     raise RuntimeError(f"作り直しの合図が通りませんでした: {last}")
 
 
-def _date_shown(text: str, want: str) -> bool:
-    """「2026/09/28 更新」の表示があるか。React は日付と「更新」の間に <!-- --> を挟む。
-    物件の宣伝文に同じ日付が入っていても通らないよう、「更新」と続く形だけを見る。"""
-    return re.search(re.escape(want) + r"(?:<!-- -->)?\s*更新", text) is not None
+def _date_shown(text: str, as_of: str, top: bool = False) -> bool:
+    """今日の更新日の表示があるか（as_of は 2026-09-28 の形）。React は日付と後ろの語の間に <!-- --> を挟む。
+    物件の宣伝文に同じ日付が入っていても通らないよう、後ろに「更新」（トップは「時点」）と続く形だけを見る。
+    テーマのページは 2026/09/28、トップは 2026/9/28（0を詰めない）の形で出る。"""
+    y, m, d = as_of.split("-")
+    date = f"{y}/{int(m)}/{int(d)}" if top else f"{y}/{m}/{d}"
+    word = "時点" if top else "更新"
+    return re.search(re.escape(date) + r"(?:<!-- -->)?\s*" + word, text) is not None
 
 
-def _check(base: str, path: str, want_date: str, since: float, deadline: float) -> str | None:
+def _check(base: str, path: str, as_of: str | None, since: float, deadline: float) -> str | None:
     """開いて作っておく。問題があれば短い説明、無ければ None。since = 合図を送った時刻（time.time()）。"""
     try:
         code, body, age = _request(base + path, timeout=min(REQUEST_TIMEOUT, deadline - time.monotonic()))
@@ -120,11 +126,13 @@ def _check(base: str, path: str, want_date: str, since: float, deadline: float) 
         at = d.get("at")
         if not at or datetime.fromisoformat(at.replace("Z", "+00:00")).timestamp() < since - 2:
             return "古い版のまま"
+        if as_of and d.get("asOf") != as_of:
+            return f"地図のデータが古いまま（{d.get('asOf')}）"
         return None if d.get("count") else "地図の点が0件"
     text = body.decode("utf-8", "replace")
-    if "ただいま読み込めませんでした" in text or "集計日不明" in text:
+    if "集計日不明" in text:
         return "データを読み込めなかった版が出ている"
-    if path.startswith("/sagasu") and not _date_shown(text, want_date):
+    if as_of and not _date_shown(text, as_of, top=path == "/"):
         return "更新日が古いまま"
     return None
 
@@ -134,9 +142,7 @@ def refresh(base: str, token: str) -> dict:
     deadline = started + DEADLINE
     since = time.time()
     info = _revalidate(base, token, deadline)
-    if not info.get("asOf"):
-        raise RuntimeError("サイトが今日の更新日を返しませんでした（相場APIの障害の可能性）")
-    want = info["asOf"].replace("-", "/")  # ページの表示は 2026/09/28 の形
+    as_of = info.get("asOf")  # 取れなくても作り置きは消えているので、開いて作るのは続ける
     paths = list(info.get("pages") or []) + list(info.get("points") or [])
     if not paths:
         raise RuntimeError("サイトが開くページの一覧を返しませんでした")
@@ -154,12 +160,14 @@ def refresh(base: str, token: str) -> dict:
             if time.monotonic() >= deadline:
                 still[p] = pending[p] if rounds > 1 else "締め切りまでに開けなかった"
                 continue
-            if (why := _check(base, p, want, since, deadline)):
+            if (why := _check(base, p, as_of, since, deadline)):
                 still[p] = why
         pending = still
+    if not as_of:
+        pending["更新日"] = "サイトが今日の更新日を返さず、日付を確かめられなかった（相場APIの一時的な障害の可能性）"
     return {
         "ok": not pending,
-        "asOf": info["asOf"],
+        "asOf": as_of,
         "checked": len(paths),
         "rounds": rounds,  # 何周目で全部そろったか（そろわなければ締め切りまでの周回数）
         "bad": {labels.get(p, p): why for p, why in pending.items()},  # {呼び名: 理由}
@@ -177,7 +185,7 @@ def problem_of(site: dict | None) -> str | None:
     shown = "・".join(f"{name}＝{why}" for name, why in list(bad.items())[:3])
     more = f" ほか{len(bad) - 3}か所" if len(bad) > 3 else ""
     return (f"公開サイトの作り直しで問題（収集とは別）: {shown}{more}。"
-            f"昨日の版が出ている可能性（見に来た人がいれば1時間で直る）。{HOW_TO_FIX}")
+            f"前の日の版が出ている可能性（次に誰かが開いたとき作り直されるが、相場APIの障害中は直らない）。{HOW_TO_FIX}")
 
 
 def read_result(path: str = RESULT_PATH) -> dict | None:
@@ -209,8 +217,20 @@ def _token() -> str:
     return token
 
 
+def _write(result: dict) -> None:
+    result["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        os.makedirs(os.path.dirname(RESULT_PATH), exist_ok=True)
+        with open(RESULT_PATH, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False)
+    except OSError as e:
+        print(f"site_refresh.json を書けませんでした: {e}", file=sys.stderr)
+
+
 def main() -> int:
     base = (os.getenv("FUDOSAN_SITE_URL") or "https://fudosan.nextcode.ltd").rstrip("/")
+    # 先に「途中で打ち切られた」を書いておく（工程の4分の打ち切りで止まっても、日報に正しい理由が出る）
+    _write({"ok": False, "error": "作り直しが途中で打ち切られた（4分を超えた）"})
     try:
         token = _token()
         if not token:
@@ -219,13 +239,7 @@ def main() -> int:
         result = refresh(base, token)
     except Exception as e:  # noqa: BLE001 - 何があっても本体を巻き込まない
         result = {"ok": False, "error": str(e)[:400]}
-    result["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    try:
-        os.makedirs(os.path.dirname(RESULT_PATH), exist_ok=True)
-        with open(RESULT_PATH, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False)
-    except OSError as e:
-        print(f"site_refresh.json を書けませんでした: {e}", file=sys.stderr)
+    _write(result)
     print("公開サイト: " + (problem_of(result) or
           f"作り直し完了（{result['checked']}か所・{result['rounds']}周・更新日 {result['asOf']}・{result['seconds']}秒）"),
           flush=True)

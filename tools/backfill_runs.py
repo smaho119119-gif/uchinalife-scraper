@@ -75,6 +75,21 @@ def env_from_log(text: str) -> dict[str, str]:
     return found
 
 
+def site_from_log(text: str) -> dict | None:
+    """report ジョブの「Refresh public site」の出力（'公開サイト: …' の1行）から結果を戻す。
+    その工程が無い古い実行は None（問題にしない）。上書きしても公開サイトの問題の記録を消さないため。"""
+    for ln in reversed(_lines(text)):
+        i = ln.find("公開サイト: ")
+        if i < 0:
+            continue
+        msg = ln[i + len("公開サイト: "):].strip()
+        if msg.startswith("作り直し完了"):
+            return {"ok": True}
+        msg = msg.removeprefix("公開サイトの作り直しで問題（収集とは別）: ").split("。対処:", 1)[0]
+        return {"ok": False, "error": msg}
+    return None
+
+
 def mail_from_log(text: str, kind: str) -> dict | None:
     """report ジョブのメール送信ステップ（'Run mkdir -p logs' で始まる段）から送信結果を読む。"""
     steps: list[list[str]] = []
@@ -182,7 +197,7 @@ def backfill_one(run: dict, dry: bool, force: bool = False) -> tuple[bool, str]:
             meta=meta, results=results, jobs=jobs, cat_rows=cat_rows, mail=mail, mode=mode,
             sold_mode=sold_mode_of(env), source="backfill",
             sold_dry_run=env.get("SCRAPER_SOLD_DRY_RUN") == "1", skip_sold=env.get("SCRAPER_SKIP_SOLD") == "1",
-            conclusion=run.get("conclusion"))
+            conclusion=run.get("conclusion"), site=site_from_log(rlog or "") if mode == "full" else None)
         head = (f"#{run.get('run_number')} {run_id} {run_row['snapshot_date']} {run.get('event')} mode={mode} "
                 f"sold={run_row['sold_mode']} 台={run_row['jobs_ok']}/{run_row['jobs_total']} "
                 f"結果ファイル={len(results)} メール={run_row['mail_sent']}")
