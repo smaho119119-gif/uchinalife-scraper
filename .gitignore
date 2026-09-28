@@ -90,3 +90,6 @@ backups/
 result_*.json
 mail-relay/node_modules/
 mail-relay/.vercel/
+
+# 実行時に作られる結果ファイル（Actions の中で mkdir -p logs）
+logs/
