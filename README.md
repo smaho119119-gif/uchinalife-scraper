@@ -43,13 +43,13 @@ fudosan.nextcode.ltd（NextCode不動産の `web/`）はページとデータを
 
 1. `POST /api/revalidate`（合言葉つき）で相場データの作り置きを全部消す
 2. トップ・/sagasu・テーマ9ページ・地図API 9本を開く
-3. 合図より後に作られた版かを確かめる（応答の `age`、地図APIの `at` と `asOf`、ページの「<日付> 更新」、トップの「<日付>時点」）。消した直後の1〜2回目はまだ古い版が返るので、そろうまで10秒おきに開き直す
+3. 合図より後に作られた版かを確かめる（応答の `age`、地図APIの `at` と `asOf`、ページの「<日付> 更新」、トップの「<日付>時点」）。消した直後はまだ古い版が返ることがある（9/28 の通しの実行では1〜3周でそろった）ので、そろうまで10秒おきに開き直す
 
 結果は `logs/site_refresh.json`。問題があれば日報の状態欄と管理ページに「公開サイトの作り直しで問題（収集とは別）」の1行が出る。
 
 | 出た文言 | 意味 | 対処 |
 |---|---|---|
-| 合言葉が一致しない | Vercel の `REVALIDATE_TOKEN` と GitHub Secret `FUDOSAN_REVALIDATE_TOKEN` が違う（Vercel 側が未設定でも同じ） | 下の「合言葉の入れ替え」で両方を同じ値に |
+| 合言葉が一致しない | Vercel の `REVALIDATE_TOKEN` と GitHub Secret `FUDOSAN_REVALIDATE_TOKEN` が違う（Vercel 側が未設定でも同じ） | 下の「合言葉の入れ替え」で両方を同じ値に（手元で流しても次の夜にまた落ちる） |
 | 合言葉が未設定 | GitHub Secret が無い | Settings → Secrets and variables → Actions に登録 |
 | サイトに合図の入口が無い | サイトを古い版に戻した | NextCode不動産の `web/app/api/revalidate` があるか確認 |
 | 古い版のまま・更新日が古いまま・地図のデータが古いまま | 締め切りまでに新しい版にならなかった | 手元で `python3 site_refresh.py` |
@@ -65,8 +65,8 @@ fudosan.nextcode.ltd（NextCode不動産の `web/`）はページとデータを
 **合言葉の入れ替え**（どちらの順でも、Vercel の出し直しと GitHub Secret の変更の間は一致しない。**定期実行（GitHub の混雑で実際は朝6時台に始まる）と重ならない昼間に、続けて全部やる**）
 
 1. 新しい値を作る: `python3 -c "import secrets;print(secrets.token_urlsafe(32))"`
-2. Vercel（プロジェクト `nextcode-property-ai`・Production）の `REVALIDATE_TOKEN` を変える: NextCode不動産の `web/` で `npx vercel env rm REVALIDATE_TOKEN production` → `npx vercel env add REVALIDATE_TOKEN production`（値を貼る）
-3. 本番を出し直す（変えた値は出し直すまで効かない）: `web/` で `npx vercel --prod`、または main に空コミットを push。相場APIが止まっているとビルドが失敗するので、その時は復旧を待つ
+2. Vercel（プロジェクト `nextcode-property-ai`・Production）の `REVALIDATE_TOKEN` を変える: **NextCode不動産のリポジトリ直下で**（Vercel との紐付け `.vercel/project.json` は直下にだけある。Root Directory は web）`npx vercel env rm REVALIDATE_TOKEN production` → `npx vercel env add REVALIDATE_TOKEN production`（値を貼る）
+3. 本番を出し直す（変えた値は出し直すまで効かない）: main に空コミットを push（`git commit --allow-empty -m "合言葉を入れ替えたので出し直し" && git push`）。相場APIが止まっているとビルドが失敗するので、その時は復旧を待つ
 4. GitHub Secret `FUDOSAN_REVALIDATE_TOKEN` を同じ値に（`gh secret set FUDOSAN_REVALIDATE_TOKEN -R smaho119119-gif/uchinalife-scraper`）
 5. 控え `~/.claude/secrets/uchinalife/revalidate_token` を同じ値に
 6. `python3 site_refresh.py` で「作り直し完了」を確かめる

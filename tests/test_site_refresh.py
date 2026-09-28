@@ -75,9 +75,54 @@ class Check(unittest.TestCase):
         self.assertIn("地図のデータが古い", self.run_check("/api/points/sea", points_body("2026-09-27", since + 1), 0, since=since))
         self.assertEqual(self.run_check("/api/points/sea", points_body("2026-09-28", since + 1, 0), 0, since=since), "地図の点が0件")
 
+    def test_broken_values_are_words_not_crashes(self):
+        since = time.time() - 10
+        bad_at = json.dumps({"count": 1, "asOf": "2026-09-28", "at": "きのう"}).encode()
+        self.assertIn("読めない", self.run_check("/api/points/sea", bad_at, 0, since=since))
+        self.assertIn("形が想定と違う", self.run_check("/sagasu/umi", THEME_HTML.encode(), 3, as_of="2026/09/28"))
+
     def test_http_words(self):
         self.assertIn("合言葉が一致しない", self.run_check("/", b"", None, code=401))
         self.assertIn("サイト側の障害", self.run_check("/", b"", None, code=503))
+
+
+class Revalidate(unittest.TestCase):
+    """合図を送る所: 5xx と通信の失敗は送り直す、4xx は1回で止める、200 の返事を読む。"""
+
+    def send(self, answers):
+        calls = []
+
+        def fake(url, method="GET", token=None, timeout=0):
+            calls.append(method)
+            a = answers[len(calls) - 1]
+            if isinstance(a, Exception):
+                raise a
+            return a
+
+        with mock.patch.object(sr, "_request", fake), mock.patch.object(sr.time, "sleep", lambda s: None):
+            try:
+                return sr._revalidate(BASE, "t", time.monotonic() + 60), calls
+            except RuntimeError as e:
+                return str(e), calls
+
+    def test_401_stops_at_once(self):
+        r, calls = self.send([(401, b"", None)] * 3)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("合言葉が一致しない", r)
+
+    def test_5xx_then_ok(self):
+        r, calls = self.send([(503, b"", None), (200, json.dumps({"asOf": "2026-09-28"}).encode(), None)])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(r["asOf"], "2026-09-28")
+
+    def test_gives_up_after_three(self):
+        r, calls = self.send([OSError("timed out")] * 3)
+        self.assertEqual(len(calls), 3)
+        self.assertIn("通信の失敗", r)
+
+    def test_uses_post(self):
+        _, calls = self.send([(200, b"{}", None)])
+        self.assertEqual(calls, ["POST"])
 
 
 class Refresh(unittest.TestCase):
@@ -140,6 +185,8 @@ class Reporting(unittest.TestCase):
         self.assertIn("ほか1か所", line)
         self.assertIn("python3 site_refresh.py", line)
         self.assertNotIn("再実行", line)  # 日報が二重に届く対処は案内しない
+        token_line = sr.problem_of({"ok": False, "error": "作り直しの合図が通りませんでした: 合言葉が一致しない（…）"})
+        self.assertIn("合言葉の入れ替え", token_line)  # 手元で流しても次の夜にまた落ちる
 
     def test_main_writes_interrupted_first(self):
         # 工程の4分の打ち切りで止まっても「途中で打ち切られた」が残る
@@ -174,6 +221,8 @@ class Backfill(unittest.TestCase):
         self.assertIn("テーマ「ペット」", backfill_runs.site_from_log(self.LOG)["error"])
         self.assertTrue(backfill_runs.site_from_log("公開サイト: 作り直し完了（20か所）")["ok"])
         self.assertIsNone(backfill_runs.site_from_log("古い実行のログ"))
+        cut = "##[group]Run mkdir -p logs\npython3 site_refresh.py\n##[error]The action has timed out."
+        self.assertIn("打ち切られた", backfill_runs.site_from_log(cut)["error"])  # 本番の記録と同じ判断
 
     def test_mail_step_is_not_confused_with_refresh_step(self):
         mail = backfill_runs.mail_from_log(self.LOG, "daily_report")

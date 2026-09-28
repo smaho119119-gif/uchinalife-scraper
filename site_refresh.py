@@ -12,8 +12,8 @@
 そこで:
   1. サイトの /api/revalidate に合言葉つきで合図を送り、相場データの作り置きを全部消す
   2. 返ってきたページと地図APIを全部開いて作っておく（朝一番の人を待たせない）
-  3. 合図より後に作られた版が返るまで開き直す。消した直後の1〜2回目はまだ古い版が返り、裏で作り直される
-     （2026-09-28 実測: /sagasu/hiraya が age=57→62→3。原因は未確認）。確かめること:
+  3. 合図より後に作られた版が返るまで開き直す。消した直後はまだ古い版が返ることがあり、裏で作り直される
+     （2026-09-28 実測: /sagasu/hiraya が age=57→62→3。通しの実行では1〜3周でそろった。原因は未確認）。確かめること:
        - 応答の age（配信側に置かれてからの秒数）が合図からの経過秒数以下
        - 地図APIは中の at（作った時刻）が合図より後、asOf（データの日付）が今日の更新日で、点が1件以上
        - テーマ一覧とテーマのページは「<今日の更新日> 更新」、トップは「<今日の更新日>時点」の表示がある
@@ -47,6 +47,8 @@ SEND_TRIES = 3       # 合図を送る回数の上限
 WAIT_SECONDS = 10    # 古い版のページを開き直す前に待つ秒数（締め切りまで繰り返す）
 # report ジョブの再実行は日報がもう1通届き記録も上書きされるので、作り直しだけを手元で流す
 HOW_TO_FIX = "対処: 手元で python3 site_refresh.py（Claude に「公開サイトを作り直して」でよい。README「公開サイトの作り直し」）"
+# 合言葉の食い違い・未設定は手元で流しても次の夜にまた落ちるので、入れ替え手順を案内する
+HOW_TO_FIX_TOKEN = "対処: README「合言葉の入れ替え」の手順で Vercel と GitHub Secret を同じ値にする"
 
 # HTTP の番号 → オーナーが読んで分かる言葉
 _HTTP_WORDS = {
@@ -121,10 +123,10 @@ def _check(base: str, path: str, as_of: str | None, since: float, deadline: floa
     if path.startswith("/api/points/"):
         try:
             d = json.loads(body)
+            at = datetime.fromisoformat(str(d.get("at")).replace("Z", "+00:00")).timestamp()
         except ValueError:
-            return "地図の点が読めない"
-        at = d.get("at")
-        if not at or datetime.fromisoformat(at.replace("Z", "+00:00")).timestamp() < since - 2:
+            return "地図の中身（作った時刻）が読めない"
+        if at < since - 2:
             return "古い版のまま"
         if as_of and d.get("asOf") != as_of:
             return f"地図のデータが古いまま（{d.get('asOf')}）"
@@ -132,8 +134,11 @@ def _check(base: str, path: str, as_of: str | None, since: float, deadline: floa
     text = body.decode("utf-8", "replace")
     if "集計日不明" in text:
         return "データを読み込めなかった版が出ている"
-    if as_of and not _date_shown(text, as_of, top=path == "/"):
-        return "更新日が古いまま"
+    try:
+        if as_of and not _date_shown(text, as_of, top=path == "/"):
+            return "更新日が古いまま"
+    except ValueError:
+        return f"更新日の形が想定と違う（{as_of}）"
     return None
 
 
@@ -180,7 +185,8 @@ def problem_of(site: dict | None) -> str | None:
     if not site or site.get("ok") is not False:
         return None
     if site.get("error"):
-        return f"公開サイトの作り直しで問題（収集とは別）: {site['error']}。{HOW_TO_FIX}"
+        token = "合言葉" in site["error"]
+        return f"公開サイトの作り直しで問題（収集とは別）: {site['error']}。{HOW_TO_FIX_TOKEN if token else HOW_TO_FIX}"
     bad = site.get("bad") or {}
     shown = "・".join(f"{name}＝{why}" for name, why in list(bad.items())[:3])
     more = f" ほか{len(bad) - 3}か所" if len(bad) > 3 else ""

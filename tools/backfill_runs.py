@@ -87,6 +87,8 @@ def site_from_log(text: str) -> dict | None:
             return {"ok": True}
         msg = msg.removeprefix("公開サイトの作り直しで問題（収集とは別）: ").split("。対処:", 1)[0]
         return {"ok": False, "error": msg}
+    if "site_refresh.py" in text:  # 工程は始まったのに結果の行が無い＝4分で打ち切られた（本番の記録と同じ判断）
+        return {"ok": False, "error": "作り直しが途中で打ち切られた（4分を超えた）"}
     return None
 
 
