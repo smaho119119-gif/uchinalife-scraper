@@ -123,7 +123,8 @@ class Revalidate(unittest.TestCase):
         self.assertIn("通信の失敗", r)
 
     def test_broken_reply_stops_without_retry(self):
-        for body in (b"[]", json.dumps({"asOf": "2026-09-28", "pages": "/abc"}).encode()):
+        for body in (b"[]", json.dumps({"asOf": "2026-09-28", "pages": "/abc"}).encode(),
+                     json.dumps({"asOf": "2026-09-28", "pages": [], "labels": ["x"]}).encode()):
             r, calls = self.send([(200, body, None)] * 3)
             self.assertEqual(len(calls), 1)
             self.assertIn("返事の形が想定と違う", r)

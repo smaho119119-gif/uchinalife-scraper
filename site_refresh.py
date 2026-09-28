@@ -92,7 +92,8 @@ def _revalidate(base: str, token: str, deadline: float) -> dict:
             if code == 200:
                 info = json.loads(body)
                 # 返事の形が崩れていたら送り直さず止める（辞書でない・一覧が文字列だと1文字ずつ開いてしまう）
-                if not isinstance(info, dict) or not all(isinstance(info.get(k) or [], list) for k in ("pages", "points")):
+                if (not isinstance(info, dict) or not all(isinstance(info.get(k) or [], list) for k in ("pages", "points"))
+                        or not isinstance(info.get("labels") or {}, dict)):
                     raise RuntimeError("作り直しの合図の返事の形が想定と違う（サイト側の /api/revalidate を確認）")
                 return info
             last = _http_words(code)
@@ -197,7 +198,7 @@ def problem_of(site: dict | None) -> str | None:
         return None
     if site.get("error"):
         err = site["error"]
-        fix = ("対処: サイトの web/app/api/revalidate/route.ts の返事（pages・points が一覧）を直して出し直し、"
+        fix = ("対処: NextCode不動産リポジトリの web/app/api/revalidate/route.ts の返事（pages・points が一覧、labels が辞書）を直して出し直し、"
                "そのあと手元で python3 site_refresh.py" if "返事の形" in err
                else HOW_TO_FIX_UNSET if "合言葉が未設定" in err
                else "対処: 控えのファイルを Vercel の REVALIDATE_TOKEN と同じ値で作り直す" if "合言葉が見つからない" in err

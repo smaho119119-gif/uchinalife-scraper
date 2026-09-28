@@ -55,6 +55,7 @@ fudosan.nextcode.ltd（NextCode不動産の `web/`）はページとデータを
 | 古い版のまま・更新日が古いまま・地図のデータが古いまま | 締め切りまでに新しい版にならなかった | 手元で `python3 site_refresh.py` |
 | データを読み込めなかった版・サイト側の障害・日付を確かめられなかった | 相場API（Supabase）か Vercel の障害 | 障害が収まってから手元で `python3 site_refresh.py` |
 | 途中で打ち切られた | 4分を超えた（どこかで応答が止まった） | 手元で `python3 site_refresh.py` |
+| 合図の返事の形が想定と違う | サイト側の `/api/revalidate` の返事が変わった | NextCode不動産の `web/app/api/revalidate/route.ts` を直して出し直してから、手元で `python3 site_refresh.py` |
 
 - 対処で GitHub の report ジョブを再実行しないこと（日報がもう1通届き、実行記録も上書きされる）
 - 前の日の版は、次に誰かが開いたときに作り直される。相場APIの障害中は直らない
