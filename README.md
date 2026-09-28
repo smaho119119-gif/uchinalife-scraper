@@ -50,7 +50,7 @@ fudosan.nextcode.ltd（NextCode不動産の `web/`）はページとデータを
 | 出た文言 | 意味 | 対処 |
 |---|---|---|
 | 合言葉が一致しない | Vercel の `REVALIDATE_TOKEN` と GitHub Secret `FUDOSAN_REVALIDATE_TOKEN` が違う（Vercel 側が未設定でも同じ） | 下の「合言葉の入れ替え」で両方を同じ値に（手元で流しても次の夜にまた落ちる） |
-| 合言葉が未設定 | GitHub Secret が無い | Settings → Secrets and variables → Actions に登録 |
+| 合言葉が未設定 | GitHub Secret が無い | 控え `~/.claude/secrets/uchinalife/revalidate_token` の値（Vercel の `REVALIDATE_TOKEN` と同じ）を Settings → Secrets and variables → Actions に `FUDOSAN_REVALIDATE_TOKEN` として登録 |
 | サイトに合図の入口が無い | サイトを古い版に戻した | NextCode不動産の `web/app/api/revalidate` があるか確認 |
 | 古い版のまま・更新日が古いまま・地図のデータが古いまま | 締め切りまでに新しい版にならなかった | 手元で `python3 site_refresh.py` |
 | データを読み込めなかった版・サイト側の障害・日付を確かめられなかった | 相場API（Supabase）か Vercel の障害 | 障害が収まってから手元で `python3 site_refresh.py` |

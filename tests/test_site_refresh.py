@@ -80,6 +80,8 @@ class Check(unittest.TestCase):
         bad_at = json.dumps({"count": 1, "asOf": "2026-09-28", "at": "きのう"}).encode()
         self.assertIn("読めない", self.run_check("/api/points/sea", bad_at, 0, since=since))
         self.assertIn("形が想定と違う", self.run_check("/sagasu/umi", THEME_HTML.encode(), 3, as_of="2026/09/28"))
+        for body in (b"[]", b'"x"', b"null"):  # 返事が辞書でなくても全体を止めない
+            self.assertIn("形が想定と違う", self.run_check("/api/points/sea", body, 0, since=since))
 
     def test_http_words(self):
         self.assertIn("合言葉が一致しない", self.run_check("/", b"", None, code=401))
@@ -187,6 +189,9 @@ class Reporting(unittest.TestCase):
         self.assertNotIn("再実行", line)  # 日報が二重に届く対処は案内しない
         token_line = sr.problem_of({"ok": False, "error": "作り直しの合図が通りませんでした: 合言葉が一致しない（…）"})
         self.assertIn("合言葉の入れ替え", token_line)  # 手元で流しても次の夜にまた落ちる
+        unset = sr.problem_of({"ok": False, "error": "合言葉が未設定（GitHub Secret FUDOSAN_REVALIDATE_TOKEN が無い）"})
+        self.assertIn("として登録", unset)
+        self.assertNotIn("入れ替え", unset)  # 案内は1つだけ
 
     def test_main_writes_interrupted_first(self):
         # 工程の4分の打ち切りで止まっても「途中で打ち切られた」が残る

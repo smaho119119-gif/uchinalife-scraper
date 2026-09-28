@@ -47,8 +47,11 @@ SEND_TRIES = 3       # 合図を送る回数の上限
 WAIT_SECONDS = 10    # 古い版のページを開き直す前に待つ秒数（締め切りまで繰り返す）
 # report ジョブの再実行は日報がもう1通届き記録も上書きされるので、作り直しだけを手元で流す
 HOW_TO_FIX = "対処: 手元で python3 site_refresh.py（Claude に「公開サイトを作り直して」でよい。README「公開サイトの作り直し」）"
-# 合言葉の食い違い・未設定は手元で流しても次の夜にまた落ちるので、入れ替え手順を案内する
+# 合言葉の食い違いは手元で流しても次の夜にまた落ちるので、入れ替え手順を案内する
 HOW_TO_FIX_TOKEN = "対処: README「合言葉の入れ替え」の手順で Vercel と GitHub Secret を同じ値にする"
+# 未設定なら、控えの値（Vercel と同じ）を GitHub Secret に登録するだけでよい
+HOW_TO_FIX_UNSET = ("対処: 控え ~/.claude/secrets/uchinalife/revalidate_token の値（Vercel の REVALIDATE_TOKEN と同じ）を "
+                    "GitHub の Settings → Secrets and variables → Actions に FUDOSAN_REVALIDATE_TOKEN として登録")
 
 # HTTP の番号 → オーナーが読んで分かる言葉
 _HTTP_WORDS = {
@@ -123,6 +126,8 @@ def _check(base: str, path: str, as_of: str | None, since: float, deadline: floa
     if path.startswith("/api/points/"):
         try:
             d = json.loads(body)
+            if not isinstance(d, dict):
+                return "地図の中身の形が想定と違う"
             at = datetime.fromisoformat(str(d.get("at")).replace("Z", "+00:00")).timestamp()
         except ValueError:
             return "地図の中身（作った時刻）が読めない"
@@ -185,8 +190,9 @@ def problem_of(site: dict | None) -> str | None:
     if not site or site.get("ok") is not False:
         return None
     if site.get("error"):
-        token = "合言葉" in site["error"]
-        return f"公開サイトの作り直しで問題（収集とは別）: {site['error']}。{HOW_TO_FIX_TOKEN if token else HOW_TO_FIX}"
+        err = site["error"]
+        fix = HOW_TO_FIX_UNSET if "合言葉が未設定" in err else HOW_TO_FIX_TOKEN if "合言葉" in err else HOW_TO_FIX
+        return f"公開サイトの作り直しで問題（収集とは別）: {err}。{fix}"
     bad = site.get("bad") or {}
     shown = "・".join(f"{name}＝{why}" for name, why in list(bad.items())[:3])
     more = f" ほか{len(bad) - 3}か所" if len(bad) > 3 else ""
@@ -240,8 +246,7 @@ def main() -> int:
     try:
         token = _token()
         if not token:
-            raise RuntimeError("合言葉が未設定（GitHub の Settings → Secrets and variables → Actions に "
-                               "FUDOSAN_REVALIDATE_TOKEN を登録）")
+            raise RuntimeError("合言葉が未設定（GitHub Secret FUDOSAN_REVALIDATE_TOKEN が無い）")
         result = refresh(base, token)
     except Exception as e:  # noqa: BLE001 - 何があっても本体を巻き込まない
         result = {"ok": False, "error": str(e)[:400]}
