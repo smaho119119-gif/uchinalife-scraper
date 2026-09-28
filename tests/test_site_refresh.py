@@ -199,6 +199,10 @@ class Reporting(unittest.TestCase):
         self.assertIn("として登録", unset)
         self.assertNotIn("入れ替え", unset)  # 案内は1つだけ
 
+    def test_broken_reply_points_to_the_site(self):
+        line = sr.problem_of({"ok": False, "error": "作り直しの合図の返事の形が想定と違う（サイト側の /api/revalidate を確認）"})
+        self.assertIn("route.ts", line.split("対処:")[1])  # 手元で流すだけでは直らない
+
     def test_local_missing_token_is_not_called_github_secret(self):
         path = os.path.join(tempfile.mkdtemp(), "site_refresh.json")
         env = {k: v for k, v in os.environ.items() if k not in ("FUDOSAN_REVALIDATE_TOKEN", "GITHUB_ACTIONS")}

@@ -197,7 +197,9 @@ def problem_of(site: dict | None) -> str | None:
         return None
     if site.get("error"):
         err = site["error"]
-        fix = (HOW_TO_FIX_UNSET if "合言葉が未設定" in err
+        fix = ("対処: サイトの web/app/api/revalidate/route.ts の返事（pages・points が一覧）を直して出し直し、"
+               "そのあと手元で python3 site_refresh.py" if "返事の形" in err
+               else HOW_TO_FIX_UNSET if "合言葉が未設定" in err
                else "対処: 控えのファイルを Vercel の REVALIDATE_TOKEN と同じ値で作り直す" if "合言葉が見つからない" in err
                else HOW_TO_FIX_TOKEN if "合言葉" in err else HOW_TO_FIX)
         return f"公開サイトの作り直しで問題（収集とは別）: {err}。{fix}"
