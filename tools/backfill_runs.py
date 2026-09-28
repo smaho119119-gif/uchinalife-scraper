@@ -85,7 +85,8 @@ def mail_from_log(text: str, kind: str) -> dict | None:
             steps.append(cur)
         elif cur is not None:
             cur.append(ln)
-    mail_steps = [s for s in steps if any(k in "\n".join(s) for k in
+    # 公開サイトの作り直し（site_refresh.py）の段も mkdir -p logs で始まるので除く
+    mail_steps = [s for s in steps if "site_refresh.py" not in "\n".join(s) and any(k in "\n".join(s) for k in
                                           ("mkdir -p logs", "actions_report.py", "notify_failure import send"))]
     if not mail_steps:
         return None

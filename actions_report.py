@@ -213,6 +213,8 @@ def build_details(results: dict[str, dict], names: dict[str, str], jobs: list[di
 
 def main(results_dir: str) -> int:
     results = load_results(results_dir)
+    # 前のステップ「Refresh public site」の結果（本番 full の回だけ。記録が無ければそれも問題）
+    site = site_refresh.problem_of(site_refresh.result_for_mode(os.getenv("MODE") or "full"))
 
     names = config.GENRE_NAMES
     failed = [c for c in config.CATEGORIES if c not in results]
@@ -222,7 +224,8 @@ def main(results_dir: str) -> int:
             "🚨 うちなーらいふスクレイパー（GitHub Actions）\n"
             "全カテゴリが失敗しました。\n\n"
             f"失敗: {', '.join(names.get(c, c) for c in failed)}\n\n"
-            f"ログ: {RUN_URL}\n"
+            + (f"{site}\n\n" if site else "")
+            + f"ログ: {RUN_URL}\n"
         )
         code = send("🚨 うちなーらいふ 全カテゴリ失敗", body, force=True)
         write_mail_result(code, "failure_alert")
@@ -241,7 +244,6 @@ def main(results_dir: str) -> int:
         elapsed = total_minutes * 60  # 全体の時間（最初の台の開始〜最後の台の終了）
 
     problems = build_problems(results, names=names)
-    site = site_refresh.problem_of(site_refresh.read_result())  # 前のステップ「Refresh public site」の結果
     if site:
         problems.append(site)
     status = build_status(problems)

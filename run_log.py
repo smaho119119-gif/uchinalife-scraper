@@ -9,7 +9,7 @@
   - results/**/result_<cat>.json と results/**/logs/<cat>.log（download-artifact の置き場所）
   - この実行のジョブ一覧（GitHub API。GH_TOKEN が無ければ gh コマンド）
   - logs/mail_result.json（actions_report.py が書く。無ければ mail_sent = null）
-  - logs/site_refresh.json（site_refresh.py が書く。失敗なら problems に1行足す）
+  - logs/site_refresh.json（site_refresh.py が書く。full の回で失敗・記録なしなら problems に1行足す）
 書く先:
   うちなーらいふDB の uchina_scrape_runs / uchina_scrape_run_categories
   （関数 uchina_log_scrape_run 経由・合言葉 UCHINA_RUN_LOG_TOKEN つき。同じ run_id は上書き）
@@ -298,6 +298,7 @@ def build_run_row(*, meta: dict, results: dict[str, dict], jobs: list[dict], cat
                   site: dict | None = None, now: datetime | None = None) -> dict:
     """実行1回分の行。meta = run_id / run_number / run_attempt / event / head_sha / run_url / created_at / run_started_at。"""
     from actions_report import build_problems, build_status
+    from site_refresh import problem_of
     cats, names = category_names()
     now = now or datetime.now(timezone.utc)
 
@@ -316,7 +317,6 @@ def build_run_row(*, meta: dict, results: dict[str, dict], jobs: list[dict], cat
         status = "メール試験のみ（収集なし）"
     else:
         problems = build_problems(results, sold_dry_run=sold_dry_run, skip_sold=skip_sold, names=names)
-        from site_refresh import problem_of
         if (p := problem_of(site)):
             problems.append(p)
         status = build_status(problems, meta.get("run_url") or "")
@@ -431,15 +431,6 @@ def read_mail_result(path: str = MAIL_RESULT_PATH) -> dict | None:
         return {"kind": "error", "sent": None, "error": f"mail_result.json を読めません: {e}"}
 
 
-def read_site_result(mode: str | None) -> dict | None:
-    """公開サイトの作り直し（site_refresh.py）の結果。収集した回で記録が無ければ、それ自体を問題にする。"""
-    from site_refresh import read_result
-    site = read_result()
-    if site is None and mode not in (None, "mail-test"):
-        return {"ok": False, "error": "結果の記録なし（作り直しの工程が動いていない）"}
-    return site
-
-
 def derive_conclusion(jobs: list[dict], job_status: str | None) -> str | None:
     """実行中（report ジョブの最後）なので、実行全体の結論は各台＋report の途中経過から出す。"""
     concl = [j.get("conclusion") for j in jobs if j.get("name") != "report" and j.get("conclusion") != "skipped"]
@@ -452,6 +443,11 @@ def derive_conclusion(jobs: list[dict], job_status: str | None) -> str | None:
     if concl and all(c == "success" for c in concl):
         return "success"
     return None
+
+
+def result_for_mode(mode: str | None) -> dict | None:
+    from site_refresh import result_for_mode as _r
+    return _r(mode)
 
 
 def main(argv: list[str]) -> int:
@@ -495,7 +491,7 @@ def main(argv: list[str]) -> int:
             mail=read_mail_result(mail_path), mode=mode, sold_mode=os.getenv("SOLD_MODE") or None, source="live",
             sold_dry_run=os.getenv("SCRAPER_SOLD_DRY_RUN") == "1", skip_sold=os.getenv("SCRAPER_SKIP_SOLD") == "1",
             conclusion=derive_conclusion(jobs, os.getenv("JOB_STATUS")),
-            site=read_site_result(mode))
+            site=result_for_mode(mode))
         if dry:
             print(json.dumps({"run": run_row, "categories": cat_rows}, ensure_ascii=False, indent=1, default=str))
             return 0

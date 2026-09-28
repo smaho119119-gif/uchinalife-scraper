@@ -154,10 +154,13 @@ jobs:
                   print(c, s, d.get("by_category", {}).get(c))
           PY
 
-      # 公開サイト（fudosan.nextcode.ltd）の作り置きを消して作り直す。日報より前に置き、結果を日報の問題欄に載せる。
-      # 失敗しても終了コード0（メール・記録を巻き込まない）。結果は logs/site_refresh.json。
+      # 公開サイト（fudosan.nextcode.ltd）の作り置きを消して作り直す（DBに書く本番 full の回だけ）。
+      # 日報より前に置き、結果を日報の問題欄に載せる。中の締め切りは150秒、ここでも4分で打ち切り、
+      # 落ちても continue-on-error で後ろ（メール・記録）へ進む。結果は logs/site_refresh.json。
       - name: Refresh public site
-        if: always() && env.MODE != 'mail-test'
+        if: always() && env.MODE == 'full'
+        timeout-minutes: 4
+        continue-on-error: true
         env:
           FUDOSAN_REVALIDATE_TOKEN: ${{ secrets.FUDOSAN_REVALIDATE_TOKEN }}
         run: |
@@ -165,7 +168,7 @@ jobs:
           python3 site_refresh.py
 
       - name: Send mail (always)
-        if: env.MODE == 'full'
+        if: always() && env.MODE == 'full'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
