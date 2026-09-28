@@ -154,6 +154,16 @@ jobs:
                   print(c, s, d.get("by_category", {}).get(c))
           PY
 
+      # 公開サイト（fudosan.nextcode.ltd）の作り置きを消して作り直す。日報より前に置き、結果を日報の問題欄に載せる。
+      # 失敗しても終了コード0（メール・記録を巻き込まない）。結果は logs/site_refresh.json。
+      - name: Refresh public site
+        if: always() && env.MODE != 'mail-test'
+        env:
+          FUDOSAN_REVALIDATE_TOKEN: ${{ secrets.FUDOSAN_REVALIDATE_TOKEN }}
+        run: |
+          mkdir -p logs
+          python3 site_refresh.py
+
       - name: Send mail (always)
         if: env.MODE == 'full'
         env:

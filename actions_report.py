@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from config import config
 from daily_report import send_daily_report
 from notify_failure import LAST_RESULT, send
+import site_refresh
 
 RUN_URL = (
     f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/"
@@ -240,6 +241,9 @@ def main(results_dir: str) -> int:
         elapsed = total_minutes * 60  # 全体の時間（最初の台の開始〜最後の台の終了）
 
     problems = build_problems(results, names=names)
+    site = site_refresh.problem_of(site_refresh.read_result())  # 前のステップ「Refresh public site」の結果
+    if site:
+        problems.append(site)
     status = build_status(problems)
 
     code = send_daily_report(
